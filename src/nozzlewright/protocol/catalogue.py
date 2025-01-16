@@ -204,8 +204,228 @@ _LABELS: tuple[CommandSpec, ...] = (
     ),
 )
 
+_GEOMETRY: tuple[CommandSpec, ...] = (
+    _spec(
+        "HORZRES",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("dpi", ArgKind.INT, low=75, high=600),
+        while_printing=False,
+    ),
+    _spec(
+        "VERTRES",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("dpi", ArgKind.INT, low=75, high=600),
+        while_printing=False,
+    ),
+    _spec(
+        "HEADNUM",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("heads", ArgKind.INT, low=1, high=8),
+        families=("HVX4PEN", "HVX8PEN"),
+        while_printing=False,
+    ),
+    _spec(
+        "GROUPNUM",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("groups", ArgKind.INT, low=1, high=4),
+        while_printing=False,
+    ),
+    _spec(
+        "GROUPORIEN",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("group", ArgKind.INT, low=1, high=4),
+        ArgSpec("orientation", ArgKind.CHOICE, choices=("UP", "DOWN", "LEFT", "RIGHT")),
+        while_printing=False,
+    ),
+    _spec(
+        "GROUPDIR",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("group", ArgKind.INT, low=1, high=4),
+        ArgSpec("reverse", ArgKind.FLAG),
+        while_printing=False,
+    ),
+    _spec(
+        "GROUPOFF",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("group", ArgKind.INT, low=1, high=4),
+        ArgSpec("offset_dots", ArgKind.INT, low=0, high=32767),
+        while_printing=False,
+    ),
+    _spec(
+        "GROUPVERT",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("group", ArgKind.INT, low=1, high=4),
+        ArgSpec("offset_dots", ArgKind.INT, low=-512, high=512),
+        while_printing=False,
+    ),
+    _spec(
+        "GROUPSPACE",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("group", ArgKind.INT, low=1, high=4),
+        ArgSpec("spacing_dots", ArgKind.INT, low=0, high=4096),
+        while_printing=False,
+    ),
+    _spec(
+        "PENHORZOFF",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("pen", ArgKind.INT, low=1, high=8),
+        ArgSpec("offset_dots", ArgKind.INT, low=-2048, high=2048),
+        families=("HVX4PEN", "HVX8PEN"),
+        while_printing=False,
+    ),
+    _spec(
+        "NOZZLEROW",
+        LEVEL_FACTORY,
+        ReplyShape.SCALAR,
+        ArgSpec("pen", ArgKind.INT, low=1, high=8),
+        ArgSpec("rows", ArgKind.INT, low=1, high=4),
+        families=("HVX4PEN", "HVX8PEN"),
+        while_printing=False,
+    ),
+)
+
+_FIRING: tuple[CommandSpec, ...] = (
+    _spec(
+        "FIRINGVOL",
+        LEVEL_FACTORY,
+        ReplyShape.SCALAR,
+        ArgSpec("pen", ArgKind.INT, low=1, high=8),
+        ArgSpec("millivolts", ArgKind.INT, low=6000, high=14000),
+        while_printing=False,
+    ),
+    _spec(
+        "PULSELEN",
+        LEVEL_FACTORY,
+        ReplyShape.SCALAR,
+        ArgSpec("pen", ArgKind.INT, low=1, high=8),
+        ArgSpec("nanoseconds", ArgKind.INT, low=400, high=3200),
+        while_printing=False,
+    ),
+    _spec(
+        "PULSEWARM",
+        LEVEL_FACTORY,
+        ReplyShape.SCALAR,
+        ArgSpec("pen", ArgKind.INT, low=1, high=8),
+        ArgSpec("nanoseconds", ArgKind.INT, low=0, high=1600),
+        while_printing=False,
+    ),
+    _spec(
+        "HFIRE",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("enabled", ArgKind.FLAG),
+    ),
+)
+
+_ENCODER: tuple[CommandSpec, ...] = (
+    _spec(
+        "SHAFTENC",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("pulses_per_rev", ArgKind.INT, low=1, high=20000),
+        ArgSpec("wheel_mm", ArgKind.INT, low=1, high=2000),
+        while_printing=False,
+    ),
+    _spec(
+        "SENCDIRECT",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("reverse", ArgKind.FLAG),
+        while_printing=False,
+    ),
+    _spec(
+        "AUTOSPEED",
+        LEVEL_SUPERVISOR,
+        ReplyShape.SCALAR,
+        ArgSpec("mm_per_min", ArgKind.INT, low=0, high=200000),
+    ),
+    _spec(
+        "PHOTOSEL",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("channel", ArgKind.INT, low=1, high=4),
+        while_printing=False,
+    ),
+    _spec(
+        "PHOTOMODE",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("mode", ArgKind.CHOICE, choices=("EDGE", "LEVEL", "GATED")),
+        while_printing=False,
+    ),
+    _spec(
+        "PHOTOMASK",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("mask_dots", ArgKind.INT, low=0, high=65535),
+        min_revision=2,
+    ),
+)
+
+_CARTRIDGE: tuple[CommandSpec, ...] = (
+    _spec("INK", LEVEL_OPERATOR, ReplyShape.TABLE),
+    _spec("INK2", LEVEL_OPERATOR, ReplyShape.TABLE, min_revision=2),
+    _spec(
+        "CTRLDATA",
+        LEVEL_FACTORY,
+        ReplyShape.EMPTY,
+        ArgSpec("pen", ArgKind.INT, low=1, high=8),
+        ArgSpec("payload", ArgKind.TEXT, max_len=256),
+    ),
+    _spec("NEEDDATA", LEVEL_FACTORY, ReplyShape.SCALAR),
+)
+
+_NETWORK: tuple[CommandSpec, ...] = (
+    _spec("WIFISCAN", LEVEL_SUPERVISOR, ReplyShape.EMPTY, while_printing=False),
+    _spec("WIFILIST", LEVEL_SUPERVISOR, ReplyShape.TABLE),
+    _spec(
+        "PROTOCOL",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("name", ArgKind.CHOICE, choices=("NONE", "MODBUS", "ETHERNETIP", "PROFINET")),
+        while_printing=False,
+    ),
+    _spec(
+        "EXTDEV",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("slot", ArgKind.INT, low=1, high=4),
+        ArgSpec("kind", ArgKind.CHOICE, choices=("NONE", "SCANNER", "SCALE", "PLC")),
+        while_printing=False,
+    ),
+    _spec(
+        "TRACKCAM",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("enabled", ArgKind.FLAG),
+        min_revision=2,
+        while_printing=False,
+    ),
+)
+
 CATALOGUE: dict[str, CommandSpec] = {
-    spec.verb: spec for spec in (*_SESSION, *_PRINT_CONTROL, *_USERS, *_LABELS)
+    spec.verb: spec
+    for spec in (
+        *_SESSION,
+        *_PRINT_CONTROL,
+        *_USERS,
+        *_LABELS,
+        *_GEOMETRY,
+        *_FIRING,
+        *_ENCODER,
+        *_CARTRIDGE,
+        *_NETWORK,
+    )
 }
 
 

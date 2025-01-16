@@ -20,7 +20,8 @@ def test_catalogue_keys_match_their_verbs() -> None:
 def test_verbs_are_upper_case_ascii() -> None:
     for verb in CATALOGUE:
         assert verb.isupper()
-        assert verb.isalpha()
+        assert verb.isalnum()
+        assert verb[0].isalpha()
 
 
 def test_lookup_returns_the_spec() -> None:
@@ -94,6 +95,70 @@ def test_int_args_declare_bounds() -> None:
                 assert arg.low is not None
                 assert arg.high is not None
                 assert arg.low <= arg.high
+
+
+def test_geometry_verbs_are_engineer_or_above() -> None:
+    for verb in ("HORZRES", "VERTRES", "GROUPNUM", "GROUPOFF", "PENHORZOFF"):
+        assert lookup(verb).level >= 2
+
+
+def test_firing_constants_are_factory_only() -> None:
+    for verb in ("FIRINGVOL", "PULSELEN", "PULSEWARM", "NOZZLEROW"):
+        assert lookup(verb).level == 3
+
+
+def test_firing_voltage_stays_inside_the_head_rating() -> None:
+    millivolts = lookup("FIRINGVOL").args[1]
+    assert millivolts.low == 6000
+    assert millivolts.high == 14000
+
+
+def test_pen_arguments_span_eight_positions() -> None:
+    for verb in ("FIRINGVOL", "PULSELEN", "PULSEWARM", "PENHORZOFF", "NOZZLEROW"):
+        pen = lookup(verb).args[0]
+        assert pen.name == "pen"
+        assert (pen.low, pen.high) == (1, 8)
+
+
+def test_vertical_group_offset_allows_negative_values() -> None:
+    offset = lookup("GROUPVERT").args[1]
+    assert offset.low is not None and offset.low < 0
+
+
+def test_pen_geometry_is_tij_only() -> None:
+    for verb in ("PENHORZOFF", "NOZZLEROW", "HEADNUM"):
+        spec = lookup(verb)
+        assert spec.supports_family("HVX4PEN")
+        assert not spec.supports_family("HVXDOD")
+
+
+def test_geometry_changes_are_blocked_mid_run() -> None:
+    for verb in ("HORZRES", "GROUPNUM", "SHAFTENC", "PHOTOMODE"):
+        assert lookup(verb).while_printing is False
+
+
+def test_autospeed_may_be_sent_while_printing() -> None:
+    assert lookup("AUTOSPEED").while_printing is True
+
+
+def test_ink_readback_is_open_to_operators() -> None:
+    assert lookup("INK").level == 0
+    assert lookup("INK2").level == 0
+    assert lookup("INK2").min_revision == 2
+
+
+def test_cartridge_control_data_is_factory_only() -> None:
+    assert lookup("CTRLDATA").level == 3
+    assert lookup("NEEDDATA").level == 3
+
+
+def test_fieldbus_choices_cover_the_shipped_stacks() -> None:
+    choices = lookup("PROTOCOL").args[0].choices
+    assert set(choices) == {"NONE", "MODBUS", "ETHERNETIP", "PROFINET"}
+
+
+def test_catalogue_has_no_duplicate_verbs() -> None:
+    assert len(CATALOGUE) == len(set(CATALOGUE))
 
 
 def test_text_args_declare_a_length_cap() -> None:
