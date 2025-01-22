@@ -4,5 +4,6 @@ from __future__ import annotations
 
 from nozzlewright.transport.base import Transport, TransportStats
 from nozzlewright.transport.loopback import LoopbackTransport, Responder
+from nozzlewright.transport.tcp import TcpTransport
 
-__all__ = ["Transport", "TransportStats", "LoopbackTransport", "Responder"]
+__all__ = ["Transport", "TransportStats", "LoopbackTransport", "Responder", "TcpTransport"]
