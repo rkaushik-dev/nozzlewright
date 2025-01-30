@@ -125,12 +125,14 @@ class Channel:
         if not self._running:
             return
         self._running = False
-        for task in (self._worker, self._reader):
-            if task is None:
-                continue
+        tasks = [task for task in (self._worker, self._reader) if task is not None]
+        for task in tasks:
             task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+        if tasks:
+            # gather with return_exceptions collects the children's cancellation
+            # as a result. Awaiting them one by one inside a suppress would eat
+            # our own caller's cancellation as well and hang the shutdown.
+            await asyncio.gather(*tasks, return_exceptions=True)
         self._worker = None
         self._reader = None
         self._drain(LinkClosed("channel stopped", endpoint=self.transport.endpoint))
