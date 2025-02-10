@@ -122,6 +122,9 @@ _SESSION: tuple[CommandSpec, ...] = (
     _spec("STATUS", LEVEL_OPERATOR, ReplyShape.RECORD),
     _spec("STATISTICS", LEVEL_OPERATOR, ReplyShape.TABLE),
     _spec("MINMAX", LEVEL_OPERATOR, ReplyShape.TABLE),
+    # Bulk configuration read. Forty round trips over a radio is a minute of an
+    # operator standing still, so revision 2 dumps the whole thing at once.
+    _spec("CONFIG", LEVEL_SUPERVISOR, ReplyShape.TABLE, min_revision=2),
 )
 
 _PRINT_CONTROL: tuple[CommandSpec, ...] = (
