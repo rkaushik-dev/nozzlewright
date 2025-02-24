@@ -153,6 +153,37 @@ class DotMatrix:
             out.columns[index] = (column >> first_row) & band
         return out
 
+    def rotated(self, quarter_turns: int) -> DotMatrix:
+        """A new matrix turned by ``quarter_turns`` clockwise.
+
+        A quarter turn swaps the axes, so a 104 dot tall message becomes a 104
+        dot wide one. That is a real change of shape rather than a view, which
+        is why this returns a new matrix instead of mutating in place, and why
+        the caller has to re-check that the result still fits the head.
+        """
+        turns = quarter_turns % 4
+        if turns == 0:
+            out = DotMatrix(height=self.height, width=self.width)
+            out.columns[:] = list(self._columns)
+            return out
+        if turns == 2:
+            out = DotMatrix(height=self.height, width=self.width)
+            out.columns[:] = list(self._columns)
+            out.flip()
+            out.mirror()
+            return out
+
+        out = DotMatrix(height=self.width, width=self.height)
+        for x in range(self.width):
+            for y in range(self.height):
+                if not self.get(x, y):
+                    continue
+                if turns == 1:
+                    out.set(self.height - 1 - y, x)
+                else:
+                    out.set(y, self.width - 1 - x)
+        return out
+
     def to_rows(self) -> list[str]:
         """Render as hash and dot rows, top first. For proofs and tests."""
         return [
