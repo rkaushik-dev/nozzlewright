@@ -81,6 +81,22 @@ def _int_option(options: dict[str, str], key: str, default: int, line_number: in
         raise LabelError("%s=%r is not a number" % (key, raw), line=line_number) from None
 
 
+#: The format is whitespace split, so a space padded counter has to say so by
+#: name. SP is the only escape the format carries and it exists only for this.
+PAD_SPACE = "SP"
+
+
+def _pad(raw: str, line_number: int) -> str:
+    """Read a counter pad character."""
+    if raw.upper() == PAD_SPACE:
+        return " "
+    if len(raw) != 1:
+        raise LabelError(
+            "pad=%r has to be one character or %s" % (raw, PAD_SPACE), line=line_number
+        )
+    return raw
+
+
 def _placement(word: str, line_number: int) -> Placement:
     """Parse an ``x,y`` pair."""
     x_text, separator, y_text = word.partition(",")
@@ -124,7 +140,7 @@ def _parse_field(words: list[str], line_number: int) -> Field:
             start=_int_option(options, "start", 1, line_number),
             step=_int_option(options, "step", 1, line_number),
             width=_int_option(options, "width", 6, line_number),
-            pad=options.get("pad", "0"),
+            pad=_pad(options.get("pad", "0"), line_number),
             wrap_at=None if wrap is None else _int_option(options, "wrap", 0, line_number),
         )
     if kind == "SHIFT":
