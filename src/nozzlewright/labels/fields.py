@@ -97,6 +97,10 @@ class Field(abc.ABC):
     def render(self, context: FieldContext) -> str:
         """The text this field contributes right now."""
 
+    @abc.abstractmethod
+    def to_source(self) -> str:
+        """The FIELD line that would parse back to this field."""
+
     def validate(self) -> None:
         """Check the field definition. Overridden where there is anything to check."""
 
@@ -118,6 +122,9 @@ class TextField(Field):
 
     def render(self, context: FieldContext) -> str:
         return self.value
+
+    def to_source(self) -> str:
+        return "FIELD %s TEXT %s" % (self.name, self.value)
 
 
 class CounterField(Field):
@@ -169,6 +176,20 @@ class CounterField(Field):
             text = text[-room:]
         return sign + text.rjust(room, self.pad)
 
+    def to_source(self) -> str:
+        parts = ["FIELD %s COUNTER" % self.name]
+        if self.start != 1:
+            parts.append("start=%d" % self.start)
+        if self.step != 1:
+            parts.append("step=%d" % self.step)
+        if self.width != 6:
+            parts.append("width=%d" % self.width)
+        if self.pad != "0":
+            parts.append("pad=%s" % ("SP" if self.pad == " " else self.pad))
+        if self.wrap_at is not None:
+            parts.append("wrap=%d" % self.wrap_at)
+        return " ".join(parts)
+
     def advance(self, value: int) -> int:
         """The next value after ``value``, wrapping if this counter wraps."""
         nxt = value + self.step
@@ -192,6 +213,9 @@ class DateField(Field):
 
     def render(self, context: FieldContext) -> str:
         return format_datecode(self.pattern, context.now)
+
+    def to_source(self) -> str:
+        return "FIELD %s DATE %s" % (self.name, self.pattern)
 
 
 class ExpiryField(Field):
@@ -219,6 +243,14 @@ class ExpiryField(Field):
         moment = datetime.combine(shifted, context.now.time())
         return format_datecode(self.pattern, moment)
 
+    def to_source(self) -> str:
+        parts = ["FIELD %s EXPIRY %s" % (self.name, self.pattern)]
+        if self.days:
+            parts.append("days=%d" % self.days)
+        if self.months:
+            parts.append("months=%d" % self.months)
+        return " ".join(parts)
+
 
 class ShiftField(Field):
     """The code for whichever shift is running."""
@@ -233,6 +265,12 @@ class ShiftField(Field):
             if window.covers(moment):
                 return window.code
         return self.fallback
+
+    def to_source(self) -> str:
+        parts = ["FIELD %s SHIFT" % self.name]
+        if self.fallback != "?":
+            parts.append("fallback=%s" % self.fallback)
+        return " ".join(parts)
 
 
 class PromptField(Field):
@@ -277,3 +315,13 @@ class PromptField(Field):
                 % (self.name, len(given), self.max_len)
             )
         return given
+
+    def to_source(self) -> str:
+        parts = ["FIELD %s PROMPT" % self.name]
+        if self.max_len != 32:
+            parts.append("max=%d" % self.max_len)
+        if not self.required:
+            parts.append("required=0")
+        if self.default:
+            parts.append("default=%s" % self.default)
+        return " ".join(parts)

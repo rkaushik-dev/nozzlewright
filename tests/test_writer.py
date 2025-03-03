@@ -91,19 +91,15 @@ def test_a_hand_written_label_normalises() -> None:
     )
 
 
-def test_an_unknown_field_kind_is_refused() -> None:
+def test_a_field_that_cannot_be_written_cannot_be_defined() -> None:
+    """The writer used to raise at render time. Now the class will not build."""
+
     class Weight(Field):
         def render(self, context: object) -> str:  # type: ignore[override]
             return "1kg"
 
-    label = LabelTemplate(
-        name="x",
-        height_dots=8,
-        fields=(Weight("w"),),
-        elements=(TextElement(name="t", source="w"),),
-    )
-    with pytest.raises(LabelError, match="writer does not know"):
-        render_label_source(label)
+    with pytest.raises(TypeError, match="to_source"):
+        Weight("w")
 
 
 def test_an_unknown_element_kind_is_refused() -> None:

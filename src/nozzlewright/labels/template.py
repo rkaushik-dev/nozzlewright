@@ -79,6 +79,15 @@ class Element:
         """The field this element draws from, empty when it draws from none."""
         return ""
 
+    @property
+    def _where(self) -> str:
+        """The placement as the stored format writes it."""
+        return "%d,%d" % (self.placement.x, self.placement.y)
+
+    def to_source(self) -> str:
+        """The element line that would parse back to this element."""
+        raise LabelError("element %s is of a kind the writer does not know" % self.name)
+
 
 @dataclass(frozen=True)
 class TextElement(Element):
@@ -99,6 +108,16 @@ class TextElement(Element):
             raise LabelError("text element %s names no field" % self.name)
         if not self.font.strip():
             raise LabelError("text element %s names no font" % self.name)
+
+    def to_source(self) -> str:
+        parts = ["TEXT %s %s %s" % (self.name, self._where, self.source)]
+        if self.font != "5x7":
+            parts.append("font=%s" % self.font)
+        if self.invert:
+            parts.append("invert=1")
+        if self.reverse:
+            parts.append("reverse=1")
+        return " ".join(parts)
 
 
 @dataclass(frozen=True)
@@ -128,6 +147,20 @@ class BarcodeElement(Element):
                 % (self.name, self.module_dots)
             )
 
+    def to_source(self) -> str:
+        parts = ["BARCODE %s %s %s" % (self.name, self._where, self.source)]
+        if self.symbology != "CODE128":
+            parts.append("symbology=%s" % self.symbology)
+        if self.height_dots != 32:
+            parts.append("height=%d" % self.height_dots)
+        if self.module_dots != 2:
+            parts.append("module=%d" % self.module_dots)
+        if not self.human_readable:
+            parts.append("human=0")
+        if self.text_font != "5x7":
+            parts.append("font=%s" % self.text_font)
+        return " ".join(parts)
+
 
 @dataclass(frozen=True)
 class RuleElement(Element):
@@ -140,6 +173,14 @@ class RuleElement(Element):
         Element.validate(self)
         if self.width_dots < 1 or self.height_dots < 1:
             raise LabelError("rule %s has no area" % self.name)
+
+    def to_source(self) -> str:
+        parts = ["RULE %s %s" % (self.name, self._where)]
+        if self.width_dots != 1:
+            parts.append("width=%d" % self.width_dots)
+        if self.height_dots != 1:
+            parts.append("height=%d" % self.height_dots)
+        return " ".join(parts)
 
 
 @dataclass(frozen=True, slots=True)
