@@ -1,0 +1,5 @@
+# Line endings are LF everywhere. Two of these files were rewritten wholesale
+# by an editor on Windows before this existed, which made a three line change
+# look like a three hundred line one.
+* text=auto eol=lf
+*.png binary
