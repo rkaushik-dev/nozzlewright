@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import pytest
-from conftest import ScriptedPrinter, scripted_link
 
+from conftest import ScriptedPrinter, scripted_link
 from nozzlewright.errors import CommandRejected, NotAuthenticated, PermissionDenied
 from nozzlewright.session.auth import Authenticator, Credentials, Operator
 from nozzlewright.session.channel import Channel

@@ -18,7 +18,7 @@ from typing import Any
 
 import structlog
 
-__all__ = ["configure_logging", "get_logger", "redact_secrets", "SECRET_KEYS"]
+__all__ = ["SECRET_KEYS", "configure_logging", "get_logger", "redact_secrets"]
 
 #: Event keys whose value is replaced wholesale.
 SECRET_KEYS = frozenset({"pin", "password", "passphrase", "psk", "token", "secret"})

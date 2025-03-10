@@ -26,12 +26,12 @@ from enum import Enum
 from nozzlewright.errors import ConfigError
 
 __all__ = [
-    "InkFamily",
-    "CartridgeSpec",
-    "Cartridge",
-    "InkLedger",
     "LOW_INK_PCT",
     "PURGE_DROPS_PER_NOZZLE",
+    "Cartridge",
+    "CartridgeSpec",
+    "InkFamily",
+    "InkLedger",
 ]
 
 #: Below this the machine warns. It does not stop.

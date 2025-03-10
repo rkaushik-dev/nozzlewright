@@ -25,7 +25,7 @@ from nozzlewright.protocol.catalogue import CommandSpec, lookup
 from nozzlewright.protocol.framing import encode_frame, strip_checksum
 from nozzlewright.protocol.status import Status
 
-__all__ = ["SimulatedUser", "SimulatedPrinter"]
+__all__ = ["SimulatedPrinter", "SimulatedUser"]
 
 
 @dataclass(slots=True)

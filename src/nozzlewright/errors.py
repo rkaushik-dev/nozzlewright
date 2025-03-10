@@ -10,21 +10,21 @@ a printer fault means the machine said no.
 from __future__ import annotations
 
 __all__ = [
-    "NozzlewrightError",
-    "TransportError",
-    "ConnectTimeout",
-    "LinkClosed",
-    "ProtocolError",
-    "FrameError",
-    "UnknownCommand",
-    "DialectMismatch",
-    "PrinterError",
     "CommandRejected",
+    "ConfigError",
+    "ConnectTimeout",
+    "DialectMismatch",
+    "FrameError",
+    "LabelError",
+    "LinkClosed",
     "NotAuthenticated",
     "PermissionDenied",
     "PrinterBusy",
-    "ConfigError",
-    "LabelError",
+    "PrinterError",
+    "ProtocolError",
+    "TransportError",
+    "UnknownCommand",
+    "NozzlewrightError",
 ]
 
 

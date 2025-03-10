@@ -30,8 +30,8 @@ __all__ = [
     "Request",
     "Response",
     "build_request",
-    "parse_response",
     "parse_record",
+    "parse_response",
     "parse_table",
 ]
 

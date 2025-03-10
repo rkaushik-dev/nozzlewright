@@ -4,8 +4,8 @@ import asyncio
 from collections.abc import AsyncIterator
 
 import pytest
-from conftest import ScriptedPrinter
 
+from conftest import ScriptedPrinter
 from nozzlewright.errors import LinkClosed, PermissionDenied
 from nozzlewright.session.auth import Credentials
 from nozzlewright.session.supervisor import PrinterSession, SessionState

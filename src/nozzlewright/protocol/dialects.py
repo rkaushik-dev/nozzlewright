@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from nozzlewright.errors import DialectMismatch, ProtocolError
 from nozzlewright.protocol.catalogue import CommandSpec, lookup
 
-__all__ = ["Quirk", "Dialect", "from_version_record", "REVISION_ONE", "REVISION_TWO"]
+__all__ = ["REVISION_ONE", "REVISION_TWO", "Dialect", "Quirk", "from_version_record"]
 
 KNOWN_FAMILIES = ("HVX4PEN", "HVX8PEN", "HVXDOD", "HVXLCP")
 HIGHEST_KNOWN_REVISION = 2

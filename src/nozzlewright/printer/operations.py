@@ -23,7 +23,7 @@ from nozzlewright.printer.status import MachineState, PrinterStatus, parse_statu
 from nozzlewright.session.supervisor import PrinterSession
 from nozzlewright.telemetry.logging import get_logger
 
-__all__ = ["InkLevel", "ApplyReport", "read_status", "read_config", "read_ink", "apply_config"]
+__all__ = ["ApplyReport", "InkLevel", "apply_config", "read_config", "read_ink", "read_status"]
 
 _log = get_logger("nozzlewright.operations")
 

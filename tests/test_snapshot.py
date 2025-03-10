@@ -3,8 +3,6 @@ from __future__ import annotations
 import pytest
 
 from nozzlewright.errors import ProtocolError
-from nozzlewright.protocol.codec import parse_table
-from nozzlewright.protocol.dialects import REVISION_ONE, REVISION_TWO
 from nozzlewright.printer.config import Fieldbus, PrinterConfig, PrintMode
 from nozzlewright.printer.encoder import Photocell, PhotocellMode, ShaftEncoder
 from nozzlewright.printer.firing import FiringProfile, FiringTable
@@ -15,6 +13,8 @@ from nozzlewright.printer.geometry import (
     PenGeometry,
 )
 from nozzlewright.printer.snapshot import parse_config_table, render_config_table
+from nozzlewright.protocol.codec import parse_table
+from nozzlewright.protocol.dialects import REVISION_ONE, REVISION_TWO
 
 
 def sample() -> PrinterConfig:
@@ -121,7 +121,7 @@ def test_row_without_a_section_is_an_error() -> None:
 
 
 def test_unknown_section_is_an_error() -> None:
-    rows = rows_for(sample()) + [{"SEC": "PLASMA", "X": "1"}]
+    rows = [*rows_for(sample()), {"SEC": "PLASMA", "X": "1"}]
     with pytest.raises(ProtocolError, match="section 'PLASMA'"):
         parse_config_table(rows, family="HVX8PEN")
 

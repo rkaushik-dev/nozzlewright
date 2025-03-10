@@ -14,6 +14,7 @@ end closing rather than as a timeout.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import socket
 
 from nozzlewright.errors import ConnectTimeout, LinkClosed, TransportError
@@ -70,10 +71,11 @@ class TcpTransport(Transport):
         if writer is None:
             return
         writer.close()
-        try:
+        # A socket that is already broken raises here and there is nothing left
+        # to do about it. Cancellation is deliberately not caught: swallowing it
+        # would leave whoever is shutting us down waiting forever.
+        with contextlib.suppress(OSError):
             await writer.wait_closed()
-        except (OSError, asyncio.CancelledError):
-            pass
 
     async def _write(self, data: bytes) -> None:
         writer = self._writer

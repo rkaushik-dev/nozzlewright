@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntEnum
 
-__all__ = ["Status", "StatusInfo", "describe", "is_retryable", "is_auth_fault", "is_fatal"]
+__all__ = ["Status", "StatusInfo", "describe", "is_auth_fault", "is_fatal", "is_retryable"]
 
 
 class Status(IntEnum):

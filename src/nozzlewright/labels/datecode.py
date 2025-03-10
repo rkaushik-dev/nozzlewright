@@ -30,7 +30,7 @@ from datetime import date, datetime
 
 from nozzlewright.errors import LabelError
 
-__all__ = ["format_datecode", "add_months", "add_days", "MONTH_NAMES", "WEEKDAY_NAMES"]
+__all__ = ["MONTH_NAMES", "WEEKDAY_NAMES", "add_days", "add_months", "format_datecode"]
 
 MONTH_NAMES = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
 WEEKDAY_NAMES = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")

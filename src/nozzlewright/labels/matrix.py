@@ -27,7 +27,7 @@ _OFF = "."
 class DotMatrix:
     """A rectangle of dots, stored as one integer per column."""
 
-    __slots__ = ("height", "_columns")
+    __slots__ = ("_columns", "height")
 
     def __init__(self, height: int, width: int = 0) -> None:
         if height < 1:

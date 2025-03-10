@@ -6,9 +6,10 @@ import pytest
 
 from nozzlewright.errors import LabelError
 from nozzlewright.labels import code128
+from nozzlewright.labels.fields import FieldContext, TextField
 from nozzlewright.labels.font_data import FIVE_BY_SEVEN
-from nozzlewright.labels.fonts import FontStore
 from nozzlewright.labels.fontops import register_standard_family
+from nozzlewright.labels.fonts import FontStore
 from nozzlewright.labels.raster import RasterOptions, render_label
 from nozzlewright.labels.template import (
     BarcodeElement,
@@ -17,7 +18,6 @@ from nozzlewright.labels.template import (
     RuleElement,
     TextElement,
 )
-from nozzlewright.labels.fields import FieldContext, TextField
 
 
 def store() -> FontStore:

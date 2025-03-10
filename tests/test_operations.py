@@ -17,8 +17,8 @@ from nozzlewright.printer.operations import (
     read_ink,
     read_status,
 )
-from nozzlewright.protocol.dialects import REVISION_ONE
 from nozzlewright.printer.status import MachineState
+from nozzlewright.protocol.dialects import REVISION_ONE
 from nozzlewright.session.auth import Credentials
 from nozzlewright.session.supervisor import PrinterSession
 from nozzlewright.settings import LinkSettings, SessionSettings

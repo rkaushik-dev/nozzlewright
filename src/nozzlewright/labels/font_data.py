@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from nozzlewright.labels.fonts import BitmapFont, Glyph, compile_glyph
 
-__all__ = ["FIVE_BY_SEVEN", "build_five_by_seven", "PATTERNS"]
+__all__ = ["FIVE_BY_SEVEN", "PATTERNS", "build_five_by_seven"]
 
 _ROW_SEPARATOR = "/"
 

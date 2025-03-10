@@ -21,14 +21,14 @@ from __future__ import annotations
 from nozzlewright.errors import LabelError
 
 __all__ = [
-    "encode",
-    "modules_for",
     "PATTERNS",
+    "QUIET_ZONE_MODULES",
     "START_A",
     "START_B",
     "START_C",
     "STOP",
-    "QUIET_ZONE_MODULES",
+    "encode",
+    "modules_for",
 ]
 
 #: Quiet zone either side, in modules. Ten is the standard minimum.
@@ -87,7 +87,7 @@ def _should_switch_to_c(data: str, index: int) -> bool:
     """
     run = _digit_run(data, index)
     if index == 0:
-        return run >= 2 and run % 2 == 0 or run >= 4
+        return (run >= 2 and run % 2 == 0) or run >= 4
     return run >= 4
 
 

@@ -7,7 +7,7 @@ import pytest
 from nozzlewright.errors import LabelError
 from nozzlewright.labels.fields import Field
 from nozzlewright.labels.parser import parse_label
-from nozzlewright.labels.template import Element, LabelTemplate, Placement, TextElement
+from nozzlewright.labels.template import Element, LabelTemplate, Placement
 from nozzlewright.labels.writer import render_label_source
 
 SOURCES = [

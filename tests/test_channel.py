@@ -4,8 +4,8 @@ import asyncio
 from collections.abc import AsyncIterator
 
 import pytest
-from conftest import ScriptedPrinter, scripted_link
 
+from conftest import ScriptedPrinter, scripted_link
 from nozzlewright.errors import CommandRejected, DialectMismatch, LinkClosed, PrinterBusy
 from nozzlewright.protocol.dialects import REVISION_ONE, REVISION_TWO
 from nozzlewright.session.channel import Channel, QueueFull

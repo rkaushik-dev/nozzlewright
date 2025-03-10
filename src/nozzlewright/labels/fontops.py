@@ -16,7 +16,7 @@ from __future__ import annotations
 from nozzlewright.errors import LabelError
 from nozzlewright.labels.fonts import MAX_FONT_HEIGHT, BitmapFont, FontStore, Glyph
 
-__all__ = ["scale_font", "embolden", "condense", "register_standard_family"]
+__all__ = ["condense", "embolden", "register_standard_family", "scale_font"]
 
 MAX_SCALE = 8
 

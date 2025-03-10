@@ -20,10 +20,10 @@ from enum import Enum, IntFlag
 from nozzlewright.errors import ProtocolError
 
 __all__ = [
-    "MachineState",
     "Alarm",
-    "Severity",
+    "MachineState",
     "PrinterStatus",
+    "Severity",
     "decode_alarms",
     "severity_of",
 ]

@@ -17,21 +17,22 @@ deal with a half formed label.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field as dataclass_field
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 
 from nozzlewright.errors import LabelError
 from nozzlewright.labels.fields import Field, FieldContext
 
 __all__ = [
-    "Placement",
-    "Element",
-    "TextElement",
+    "MAX_LABEL_WIDTH_DOTS",
     "BarcodeElement",
-    "RuleElement",
+    "Element",
+    "LabelTemplate",
+    "Placement",
     "ResolvedElement",
     "ResolvedLabel",
-    "LabelTemplate",
-    "MAX_LABEL_WIDTH_DOTS",
+    "RuleElement",
+    "TextElement",
 ]
 
 #: Widest message the column buffer holds.

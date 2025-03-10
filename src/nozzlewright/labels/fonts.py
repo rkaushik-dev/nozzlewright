@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 from nozzlewright.errors import LabelError
 
-__all__ = ["Glyph", "BitmapFont", "FontStore", "compile_glyph", "MAX_FONT_HEIGHT"]
+__all__ = ["MAX_FONT_HEIGHT", "BitmapFont", "FontStore", "Glyph", "compile_glyph"]
 
 #: Tallest font a cartridge can print in one pass, four rows of 52.
 MAX_FONT_HEIGHT = 208

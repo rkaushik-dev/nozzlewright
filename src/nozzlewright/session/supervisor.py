@@ -19,7 +19,6 @@ three and no clue why.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 from collections.abc import Awaitable, Callable
 from enum import Enum
 
@@ -33,7 +32,7 @@ from nozzlewright.telemetry.logging import get_logger
 from nozzlewright.transport.base import Transport
 from nozzlewright.transport.dialer import Dialer
 
-__all__ = ["SessionState", "PrinterSession"]
+__all__ = ["PrinterSession", "SessionState"]
 
 LinkFactory = Callable[[], Transport]
 StateHook = Callable[["PrinterSession", "SessionState"], Awaitable[None]]

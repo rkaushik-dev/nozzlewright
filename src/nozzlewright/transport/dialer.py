@@ -20,7 +20,7 @@ from collections.abc import Awaitable, Callable
 from nozzlewright.errors import ConnectTimeout, TransportError
 from nozzlewright.transport.base import Transport
 
-__all__ = ["Dialer", "DialOutcome"]
+__all__ = ["DialOutcome", "Dialer"]
 
 #: Builds a fresh transport. A new one per attempt, because a socket that failed
 #: to connect is not reusable on any platform we support.
@@ -33,7 +33,7 @@ FailureHook = Callable[[int, Exception], Awaitable[None]]
 class DialOutcome:
     """What one call to :meth:`Dialer.dial` ended up doing."""
 
-    __slots__ = ("transport", "attempts", "waited_s", "last_error")
+    __slots__ = ("attempts", "last_error", "transport", "waited_s")
 
     def __init__(self) -> None:
         self.transport: Transport | None = None

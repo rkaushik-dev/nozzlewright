@@ -14,22 +14,23 @@ reproducible six months later when a customer asks what a code meant.
 from __future__ import annotations
 
 import abc
-from dataclasses import dataclass, field as dataclass_field
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from datetime import datetime, time
 
 from nozzlewright.errors import LabelError
 from nozzlewright.labels.datecode import add_days, add_months, format_datecode
 
 __all__ = [
-    "ShiftWindow",
-    "FieldContext",
-    "Field",
-    "TextField",
     "CounterField",
     "DateField",
     "ExpiryField",
-    "ShiftField",
+    "Field",
+    "FieldContext",
     "PromptField",
+    "ShiftField",
+    "ShiftWindow",
+    "TextField",
 ]
 
 MAX_COUNTER_WIDTH = 12
@@ -101,8 +102,12 @@ class Field(abc.ABC):
     def to_source(self) -> str:
         """The FIELD line that would parse back to this field."""
 
-    def validate(self) -> None:
-        """Check the field definition. Overridden where there is anything to check."""
+    def validate(self) -> None:  # noqa: B027
+        """Check the field definition.
+
+        Empty on purpose and not abstract. Most fields have nothing to check and
+        making this abstract would force every one of them to write a pass.
+        """
 
     @property
     def interactive(self) -> bool:

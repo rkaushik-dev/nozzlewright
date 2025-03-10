@@ -22,11 +22,11 @@ from enum import Enum
 from nozzlewright.errors import UnknownCommand
 
 __all__ = [
+    "CATALOGUE",
     "ArgKind",
     "ArgSpec",
-    "ReplyShape",
     "CommandSpec",
-    "CATALOGUE",
+    "ReplyShape",
     "lookup",
     "verbs_for_level",
 ]

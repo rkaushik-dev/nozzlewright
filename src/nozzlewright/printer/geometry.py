@@ -23,13 +23,13 @@ from enum import Enum
 from nozzlewright.errors import ConfigError
 
 __all__ = [
-    "Orientation",
-    "NOZZLES_PER_ROW",
+    "MM_PER_INCH",
     "NATIVE_VERTICAL_DPI",
-    "PenGeometry",
+    "NOZZLES_PER_ROW",
     "GroupGeometry",
     "HeadGeometry",
-    "MM_PER_INCH",
+    "Orientation",
+    "PenGeometry",
 ]
 
 MM_PER_INCH = 25.4
@@ -163,7 +163,9 @@ class GroupGeometry:
                 raise ConfigError("group.pens", pen.index, "pen appears twice in one group")
             seen.add(pen.index)
         if self.offset_dots < 0:
-            raise ConfigError("group.offset_dots", self.offset_dots, "print delay cannot be negative")
+            raise ConfigError(
+                "group.offset_dots", self.offset_dots, "print delay cannot be negative"
+            )
         if self.spacing_dots < 0:
             raise ConfigError("group.spacing_dots", self.spacing_dots, "spacing cannot be negative")
 

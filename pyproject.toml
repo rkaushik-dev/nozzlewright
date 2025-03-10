@@ -49,7 +49,16 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF"]
-ignore = ["B008"]
+# B008 is the fastapi dependency idiom, which we use on purpose.
+# UP031 wants f-strings everywhere. This code base formats with percent on
+# purpose so the log calls and the exception messages read the same way, and a
+# two hundred site rewrite to satisfy a style rule buys nothing.
+ignore = ["B008", "UP031"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test fixtures spell out wire text and stored label source, and wrapping those
+# hides what is being tested.
+"tests/*" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"

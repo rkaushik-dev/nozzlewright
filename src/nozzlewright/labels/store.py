@@ -17,7 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from nozzlewright.errors import LabelError
@@ -25,7 +25,7 @@ from nozzlewright.labels.parser import parse_label
 from nozzlewright.labels.template import LabelTemplate
 from nozzlewright.labels.writer import render_label_source
 
-__all__ = ["LabelRecord", "LabelStore", "content_hash", "INDEX_NAME", "LABEL_SUFFIX"]
+__all__ = ["INDEX_NAME", "LABEL_SUFFIX", "LabelRecord", "LabelStore", "content_hash"]
 
 INDEX_NAME = "index.json"
 LABEL_SUFFIX = ".lbl"
@@ -195,7 +195,7 @@ class LabelStore:
             revision=revision,
             digest=content_hash(source),
             height_dots=template.height_dots,
-            updated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            updated_at=datetime.now(UTC).isoformat(timespec="seconds"),
             interactive=bool(template.interactive_fields()),
         )
 

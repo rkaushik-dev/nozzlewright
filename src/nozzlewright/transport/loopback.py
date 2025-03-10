@@ -17,7 +17,7 @@ from collections.abc import Awaitable, Callable
 from nozzlewright.errors import LinkClosed
 from nozzlewright.transport.base import Transport
 
-__all__ = ["Responder", "LoopbackTransport"]
+__all__ = ["LoopbackTransport", "Responder"]
 
 #: Called with everything written since the last call. Returns the bytes to
 #: hand back, which may be empty.

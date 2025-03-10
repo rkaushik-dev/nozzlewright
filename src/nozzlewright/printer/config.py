@@ -22,7 +22,7 @@ from nozzlewright.printer.encoder import Photocell, ShaftEncoder, SpeedSource
 from nozzlewright.printer.firing import FiringTable
 from nozzlewright.printer.geometry import GroupGeometry, HeadGeometry
 
-__all__ = ["PrintMode", "Fieldbus", "FieldChange", "ConfigDiff", "PrinterConfig"]
+__all__ = ["ConfigDiff", "FieldChange", "Fieldbus", "PrintMode", "PrinterConfig"]
 
 
 class PrintMode(Enum):

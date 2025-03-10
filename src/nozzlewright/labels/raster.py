@@ -27,7 +27,7 @@ from nozzlewright.labels.template import (
     TextElement,
 )
 
-__all__ = ["RasterOptions", "render_label", "render_element"]
+__all__ = ["RasterOptions", "render_element", "render_label"]
 
 #: Gap between a barcode and its human readable line, in dots.
 HUMAN_READABLE_GAP = 2

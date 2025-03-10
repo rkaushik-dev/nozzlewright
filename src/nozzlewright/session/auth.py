@@ -20,7 +20,7 @@ from nozzlewright.protocol.catalogue import lookup
 from nozzlewright.protocol.status import Status
 from nozzlewright.session.channel import Channel
 
-__all__ = ["Operator", "Credentials", "Authenticator"]
+__all__ = ["Authenticator", "Credentials", "Operator"]
 
 LEVEL_NAMES = {0: "operator", 1: "supervisor", 2: "engineer", 3: "factory"}
 

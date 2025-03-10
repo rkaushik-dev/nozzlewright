@@ -24,7 +24,7 @@ __all__ = ["Transport", "TransportStats"]
 class TransportStats:
     """Counters a technician looks at when a link is behaving badly."""
 
-    __slots__ = ("bytes_in", "bytes_out", "opens", "reopens", "read_timeouts", "errors")
+    __slots__ = ("bytes_in", "bytes_out", "errors", "opens", "read_timeouts", "reopens")
 
     def __init__(self) -> None:
         self.bytes_in = 0

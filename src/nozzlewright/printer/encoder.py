@@ -29,11 +29,11 @@ from nozzlewright.errors import ConfigError
 from nozzlewright.printer.geometry import MM_PER_INCH
 
 __all__ = [
+    "MAX_FIRE_HZ",
+    "Photocell",
     "PhotocellMode",
     "ShaftEncoder",
-    "Photocell",
     "SpeedSource",
-    "MAX_FIRE_HZ",
 ]
 
 #: The fastest a nozzle row can be refired without starving. Set by the ink,

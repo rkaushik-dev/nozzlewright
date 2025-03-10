@@ -19,9 +19,9 @@ from collections.abc import Iterator
 from nozzlewright.errors import FrameError
 
 __all__ = [
+    "CHECKSUM_MARKER",
     "MAX_FRAME_BYTES",
     "TERMINATOR",
-    "CHECKSUM_MARKER",
     "FrameBuffer",
     "checksum",
     "encode_frame",

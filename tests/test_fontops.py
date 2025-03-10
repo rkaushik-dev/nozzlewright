@@ -4,13 +4,13 @@ import pytest
 
 from nozzlewright.errors import LabelError
 from nozzlewright.labels.font_data import FIVE_BY_SEVEN
-from nozzlewright.labels.fonts import FontStore, compile_glyph
 from nozzlewright.labels.fontops import (
     condense,
     embolden,
     register_standard_family,
     scale_font,
 )
+from nozzlewright.labels.fonts import FontStore, compile_glyph
 
 
 def test_scaling_by_one_returns_the_same_font() -> None:

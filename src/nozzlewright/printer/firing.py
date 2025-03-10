@@ -28,11 +28,11 @@ from dataclasses import dataclass, replace
 from nozzlewright.errors import ConfigError
 
 __all__ = [
+    "MAX_MILLIVOLTS",
+    "MIN_MILLIVOLTS",
+    "REFERENCE_TEMPERATURE_C",
     "FiringProfile",
     "FiringTable",
-    "MIN_MILLIVOLTS",
-    "MAX_MILLIVOLTS",
-    "REFERENCE_TEMPERATURE_C",
 ]
 
 MIN_MILLIVOLTS = 6000

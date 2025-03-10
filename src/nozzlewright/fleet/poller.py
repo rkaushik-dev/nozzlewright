@@ -17,7 +17,6 @@ subscribes to the hook, and neither has to keep up with the poll rate.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import random
 import time
 from collections.abc import Awaitable, Callable
@@ -30,7 +29,7 @@ from nozzlewright.printer.status import PrinterStatus, Severity
 from nozzlewright.session.supervisor import PrinterSession
 from nozzlewright.telemetry.logging import get_logger
 
-__all__ = ["PollResult", "FleetPoller", "SessionProvider", "ResultHook"]
+__all__ = ["FleetPoller", "PollResult", "ResultHook", "SessionProvider"]
 
 SessionProvider = Callable[[PrinterRecord], PrinterSession]
 ResultHook = Callable[["PollResult"], Awaitable[None]]

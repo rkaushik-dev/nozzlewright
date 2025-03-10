@@ -185,7 +185,7 @@ class Channel:
                     self._frames.put_nowait(frame)
         except asyncio.CancelledError:
             raise
-        except Exception as error:  # noqa: BLE001 - the fault is reported, not swallowed
+        except Exception as error:
             self._fail(error)
 
     async def _work_loop(self) -> None:
@@ -202,7 +202,7 @@ class Channel:
                 await self._exchange(pending)
         except asyncio.CancelledError:
             raise
-        except Exception as error:  # noqa: BLE001 - same, the fault is reported
+        except Exception as error:
             self._fail(error)
 
     async def _keepalive(self) -> None:
