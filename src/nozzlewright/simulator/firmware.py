@@ -24,6 +24,7 @@ from nozzlewright.printer.status import Alarm, MachineState
 from nozzlewright.protocol.catalogue import CommandSpec, lookup
 from nozzlewright.protocol.framing import encode_frame, strip_checksum
 from nozzlewright.protocol.status import Status
+from nozzlewright.simulator.settings_store import BadArgument, apply_setting
 
 __all__ = ["SimulatedPrinter", "SimulatedUser"]
 
@@ -109,9 +110,22 @@ class SimulatedPrinter:
             return gate
 
         handler = getattr(self, "_do_" + verb.lower(), None)
-        if handler is None:
+        if handler is not None:
+            return handler(args)
+        return self._setting(verb, args)
+
+    def _setting(self, verb: str, args: list[str]) -> tuple[int, str]:
+        """Remember a setting verb, so a config read gives back what was pushed."""
+        if self.config is None:
             return int(Status.OK), ""
-        return handler(args)
+        try:
+            updated = apply_setting(self.config, verb, args)
+        except BadArgument:
+            return int(Status.BAD_PARAM), ""
+        if updated is None:
+            return int(Status.OK), ""
+        self.config = updated
+        return int(Status.OK), ""
 
     def _gate(self, verb: str, spec: CommandSpec) -> tuple[int, str] | None:
         """The checks the firmware runs before any handler sees a command."""
