@@ -20,6 +20,8 @@ dependencies = [
     "pydantic-settings==2.7.1",
     "structlog==25.1.0",
     "anyio==4.8.0",
+    "SQLAlchemy==2.0.38",
+    "alembic==1.14.1",
 ]
 
 [project.optional-dependencies]
