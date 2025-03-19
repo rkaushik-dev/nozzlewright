@@ -23,7 +23,7 @@ from dataclasses import dataclass, field, replace
 from nozzlewright.fleet.poller import PollResult
 from nozzlewright.printer.status import MachineState, Severity, severity_of
 
-__all__ = ["UNREACHABLE", "AlarmEvent", "AlarmFeed", "AlarmKey"]
+__all__ = ["UNREACHABLE", "AlarmEvent", "AlarmFeed", "AlarmKey", "alarm_names_in"]
 
 #: The pseudo alarm raised when a machine does not answer.
 UNREACHABLE = "UNREACHABLE"
@@ -96,7 +96,7 @@ class AlarmFeed:
     def observe(self, result: PollResult, now: float | None = None) -> tuple[AlarmEvent, ...]:
         """Fold one poll result in and return the alarms it raised for the first time."""
         moment = _now(now)
-        seen = self._names_in(result)
+        seen = alarm_names_in(result)
         raised: list[AlarmEvent] = []
 
         for name, severity in seen.items():
@@ -188,18 +188,22 @@ class AlarmFeed:
         if len(self._history) > self.history_limit:
             del self._history[: len(self._history) - self.history_limit]
 
-    @staticmethod
-    def _names_in(result: PollResult) -> dict[str, Severity]:
-        """Alarm names this reading is showing, with their severities."""
-        if result.status is None:
-            return {UNREACHABLE: Severity.STOP}
-        found: dict[str, Severity] = {}
-        for bit in result.status.active_alarms():
-            name = bit.name or str(int(bit))
-            found[name] = severity_of(bit)
-        if result.status.state is MachineState.FAULT and not found:
-            found["FAULT"] = Severity.STOP
-        return found
+
+def alarm_names_in(result: PollResult) -> dict[str, Severity]:
+    """The alarm names one reading is showing, with their severities.
+
+    Shared with the database recorder on purpose. Two copies of this rule is two
+    answers to "is this machine in alarm", and the wall board and the history
+    would eventually disagree.
+    """
+    if result.status is None:
+        return {UNREACHABLE: Severity.STOP}
+    found: dict[str, Severity] = {}
+    for bit in result.status.active_alarms():
+        found[bit.name or str(int(bit))] = severity_of(bit)
+    if result.status.state is MachineState.FAULT and not found:
+        found["FAULT"] = Severity.STOP
+    return found
 
 
 def _worst(left: Severity, right: Severity) -> Severity:

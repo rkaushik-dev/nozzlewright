@@ -35,6 +35,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
 __all__ = [
     "AlarmRecord",
@@ -43,6 +44,7 @@ __all__ = [
     "LabelRevision",
     "PollSample",
     "Printer",
+    "UtcDateTime",
     "utcnow",
 ]
 
@@ -50,6 +52,39 @@ __all__ = [
 def utcnow() -> datetime:
     """Now, in UTC, with the offset attached."""
     return datetime.now(UTC)
+
+
+class UtcDateTime(TypeDecorator[datetime]):
+    """A datetime column that is UTC on both sides of the wire.
+
+    SQLite has no timestamp type. It stores what it is given and hands it back
+    without an offset, so a column declared ``timezone=True`` reads as naive and
+    every comparison against an aware datetime raises. Postgres does keep the
+    offset, which means the bug only shows up on the gateways and never on the
+    developer machine.
+
+    So the conversion happens here rather than being hoped for: everything is
+    stored as UTC, and everything comes back tagged as UTC. A naive value going
+    in is an error, because guessing which zone somebody meant is how a shift
+    report ends up an hour out.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect: object) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("refusing to store a datetime with no zone")
+        return value.astimezone(UTC)
+
+    def process_result_value(self, value: datetime | None, dialect: object) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
 
 
 class Base(DeclarativeBase):
@@ -70,8 +105,8 @@ class Printer(Base):
     family: Mapped[str] = mapped_column(String(16), default="")
     firmware: Mapped[str] = mapped_column(String(32), default="")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), default=utcnow)
+    seen_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
 
     samples: Mapped[list[PollSample]] = relationship(
         back_populates="printer", cascade="all, delete-orphan"
@@ -97,7 +132,7 @@ class PollSample(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     printer_pk: Mapped[int] = mapped_column(ForeignKey("printers.id", ondelete="CASCADE"))
-    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    at: Mapped[datetime] = mapped_column(UtcDateTime(), default=utcnow, index=True)
     reachable: Mapped[bool] = mapped_column(Boolean, default=True)
     state: Mapped[str] = mapped_column(String(16), default="")
     alarms: Mapped[int] = mapped_column(Integer, default=0)
@@ -125,8 +160,8 @@ class AlarmRecord(Base):
     printer_pk: Mapped[int] = mapped_column(ForeignKey("printers.id", ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String(32), index=True)
     severity: Mapped[str] = mapped_column(String(16), default="warning")
-    raised_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    cleared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    raised_at: Mapped[datetime] = mapped_column(UtcDateTime(), default=utcnow)
+    cleared_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
     seen: Mapped[int] = mapped_column(Integer, default=1)
     acknowledged_by: Mapped[str] = mapped_column(String(32), default="")
 
@@ -154,7 +189,7 @@ class LabelRevision(Base):
     source: Mapped[str] = mapped_column(String(8192))
     height_dots: Mapped[int] = mapped_column(Integer, default=0)
     interactive: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), default=utcnow)
     created_by: Mapped[str] = mapped_column(String(32), default="")
 
     def __repr__(self) -> str:
@@ -171,7 +206,7 @@ class ConfigSnapshot(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     printer_pk: Mapped[int] = mapped_column(ForeignKey("printers.id", ondelete="CASCADE"))
-    taken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    taken_at: Mapped[datetime] = mapped_column(UtcDateTime(), default=utcnow)
     digest: Mapped[str] = mapped_column(String(32), index=True)
     payload: Mapped[str] = mapped_column(String(8192))
     reason: Mapped[str] = mapped_column(String(64), default="")
