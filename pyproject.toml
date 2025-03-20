@@ -37,7 +37,7 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-nozzlewright = ["py.typed"]
+nozzlewright = ["py.typed", "storage/migrations/*.py", "storage/migrations/versions/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
