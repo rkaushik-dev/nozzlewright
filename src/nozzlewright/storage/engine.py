@@ -18,6 +18,7 @@ from pathlib import Path
 
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from nozzlewright.storage.models import Base
 
@@ -34,13 +35,24 @@ _SQLITE_PRAGMAS = (
 def build_engine(url: str, *, echo: bool = False) -> Engine:
     """Build an engine and set the pragmas SQLite needs."""
     connect_args: dict[str, object] = {}
+    options: dict[str, object] = {}
     if url.startswith("sqlite"):
         connect_args["check_same_thread"] = False
         _ensure_parent(url)
-    engine = create_engine(url, echo=echo, future=True, connect_args=connect_args)
+        if _is_memory(url):
+            # An in memory database lives inside one connection. With the normal
+            # pool the second session opens a second, empty database and every
+            # query fails on a table that was created a moment ago.
+            options["poolclass"] = StaticPool
+    engine = create_engine(url, echo=echo, future=True, connect_args=connect_args, **options)
     if url.startswith("sqlite"):
         _install_pragmas(engine)
     return engine
+
+
+def _is_memory(url: str) -> bool:
+    """True for the in memory forms of a SQLite url."""
+    return url in ("sqlite://", "sqlite:///:memory:") or "mode=memory" in url
 
 
 def _ensure_parent(url: str) -> None:
