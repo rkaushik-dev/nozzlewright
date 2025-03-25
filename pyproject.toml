@@ -24,7 +24,11 @@ dependencies = [
     "alembic==1.14.1",
     "fastapi==0.115.8",
     "uvicorn[standard]==0.34.0",
+    "typer==0.15.1",
 ]
+
+[project.scripts]
+nozzlewright = "nozzlewright.cli.main:main"
 
 [project.optional-dependencies]
 dev = [
