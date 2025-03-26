@@ -13,7 +13,6 @@ and they render those as noise.
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 from typing import Any
 
@@ -21,35 +20,19 @@ import typer
 
 from nozzlewright import __version__
 from nozzlewright.cli.context import Context
+from nozzlewright.cli.output import emit
+from nozzlewright.cli.printer_commands import printer_app
 from nozzlewright.errors import NozzlewrightError
 from nozzlewright.fleet.registry import PrinterRecord
 from nozzlewright.settings import load_settings
 from nozzlewright.telemetry.logging import configure_logging
 
-__all__ = ["app", "main", "registry_app"]
+__all__ = ["app", "main", "registry_app", "run"]
 
 app = typer.Typer(add_completion=False, help="Fleet control for Halvex coding printers.")
 registry_app = typer.Typer(help="The list of machines on this site.")
 app.add_typer(registry_app, name="registry")
-
-
-def _emit(payload: Any, as_json: bool) -> None:
-    """Print a result, either as JSON or as one line per row."""
-    if as_json:
-        typer.echo(json.dumps(payload, indent=2, sort_keys=True, default=str))
-        return
-    if isinstance(payload, list):
-        for row in payload:
-            typer.echo(_line(row))
-        return
-    typer.echo(_line(payload))
-
-
-def _line(row: Any) -> str:
-    """One row as readable text."""
-    if isinstance(row, dict):
-        return "  ".join("%s=%s" % (key, row[key]) for key in row)
-    return str(row)
+app.add_typer(printer_app, name="printer")
 
 
 def _context(ctx: typer.Context) -> Context:
@@ -64,11 +47,16 @@ def root(
     user: str = typer.Option("", help="Operator to log in as."),
     pin: str = typer.Option("", help="Operator PIN."),
     log_level: str = typer.Option("WARNING", help="Log level for the tool itself."),
+    simulate: bool = typer.Option(
+        False, "--simulate", help="Talk to the built in machine model instead of a printer."
+    ),
 ) -> None:
     """Set up the shared context before any command runs."""
     settings = load_settings()
     configure_logging(level=log_level, fmt=settings.log_format)
-    ctx.obj = Context(settings=settings, state_dir=state_dir, user=user, pin=pin)
+    ctx.obj = Context(
+        settings=settings, state_dir=state_dir, user=user, pin=pin, simulate=simulate
+    )
 
 
 @app.command()
@@ -86,7 +74,7 @@ def registry_list(
     """Show the machines on this site."""
     registry = _context(ctx).load_registry()
     records = registry.on_line(line) if line else registry.all()
-    _emit(
+    emit(
         [
             {
                 "printer_id": item.printer_id,

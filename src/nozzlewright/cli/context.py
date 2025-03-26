@@ -33,8 +33,19 @@ REGISTRY_NAME = "registry.json"
 DATABASE_NAME = "site.sqlite3"
 
 
-def build_transport(record: PrinterRecord, settings: Settings) -> Transport:
-    """The link one registry record describes."""
+def build_transport(
+    record: PrinterRecord, settings: Settings, *, simulate: bool = False
+) -> Transport:
+    """The link one registry record describes.
+
+    ``simulate`` swaps the real link for the built in machine model. That is how
+    the demo on a training laptop works, and how the tests exercise the commands
+    without a printer on the desk.
+    """
+    if simulate:
+        from nozzlewright.simulator.firmware import SimulatedPrinter
+
+        return LoopbackTransport(SimulatedPrinter(), endpoint=record.endpoint)
     if record.kind == "tcp":
         host, _, port = record.endpoint.rpartition(":")
         try:
@@ -61,6 +72,8 @@ class Context:
     state_dir: Path | None = None
     user: str = ""
     pin: str = field(default="", repr=False)
+    simulate: bool = False
+    machines: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.state_dir is None:
@@ -98,9 +111,16 @@ class Context:
         """A supervised session for one registered machine."""
         record = self.load_registry().get(printer_id)
         settings = self.settings
+        held = self.machines.get(record.printer_id)
+
+        def link() -> Transport:
+            if held is not None:
+                return LoopbackTransport(held, endpoint=record.endpoint)  # type: ignore[arg-type]
+            return build_transport(record, settings, simulate=self.simulate)
+
         return PrinterSession(
             record.printer_id,
-            lambda: build_transport(record, settings),
+            link,
             credentials=self.credentials(),
             link_settings=settings.link,
             session_settings=settings.session,

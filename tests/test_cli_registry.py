@@ -16,7 +16,7 @@ from nozzlewright.transport.loopback import LoopbackTransport
 from nozzlewright.transport.rfcomm import RfcommTransport
 from nozzlewright.transport.tcp import TcpTransport
 
-runner = CliRunner()
+runner = CliRunner(mix_stderr=False)
 
 
 def invoke(tmp_path: Path, *args: str) -> object:
