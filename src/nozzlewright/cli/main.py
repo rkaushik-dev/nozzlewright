@@ -20,6 +20,7 @@ import typer
 
 from nozzlewright import __version__
 from nozzlewright.cli.context import Context
+from nozzlewright.cli.label_commands import label_app
 from nozzlewright.cli.output import emit
 from nozzlewright.cli.printer_commands import printer_app
 from nozzlewright.errors import NozzlewrightError
@@ -33,6 +34,7 @@ app = typer.Typer(add_completion=False, help="Fleet control for Halvex coding pr
 registry_app = typer.Typer(help="The list of machines on this site.")
 app.add_typer(registry_app, name="registry")
 app.add_typer(printer_app, name="printer")
+app.add_typer(label_app, name="label")
 
 
 def _context(ctx: typer.Context) -> Context:
