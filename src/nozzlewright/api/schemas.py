@@ -12,10 +12,11 @@ they were named by someone in a hurry, because they were.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
+from nozzlewright.fleet.alarms import escalated
 from nozzlewright.fleet.poller import PollResult
 from nozzlewright.fleet.registry import PrinterRecord
 from nozzlewright.printer.config import PrinterConfig
@@ -231,18 +232,32 @@ class AlarmOut(BaseModel):
     printer_id: str
     name: str
     severity: str
+    acting_severity: str = ""
     raised_at: datetime
     cleared_at: datetime | None = None
     seen: int = 1
     acknowledged_by: str = ""
 
     @classmethod
-    def from_row(cls, printer_id: str, row: AlarmRecord) -> AlarmOut:
-        """Build one from a stored alarm."""
+    def from_row(cls, printer_id: str, row: AlarmRecord, now: datetime | None = None) -> AlarmOut:
+        """Build one from a stored alarm.
+
+        ``acting_severity`` is the one a screen should colour by. It is worked
+        out from how long the alarm has been up rather than stored, because
+        storing it would mean rewriting every open row every minute.
+        """
+        moment = now or datetime.now(UTC)
         return cls(
             printer_id=printer_id,
             name=row.name,
             severity=row.severity,
+            acting_severity=escalated(
+                row.severity,
+                row.raised_at,
+                moment,
+                acknowledged=bool(row.acknowledged_by),
+                cleared=row.cleared_at is not None,
+            ).value,
             raised_at=row.raised_at,
             cleared_at=row.cleared_at,
             seen=row.seen,
