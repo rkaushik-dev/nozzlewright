@@ -23,6 +23,7 @@ from nozzlewright.cli.context import Context
 from nozzlewright.cli.label_commands import label_app
 from nozzlewright.cli.output import emit
 from nozzlewright.cli.printer_commands import printer_app
+from nozzlewright.cli.serve_commands import db_app, serve_app
 from nozzlewright.errors import NozzlewrightError
 from nozzlewright.fleet.registry import PrinterRecord
 from nozzlewright.settings import load_settings
@@ -35,6 +36,8 @@ registry_app = typer.Typer(help="The list of machines on this site.")
 app.add_typer(registry_app, name="registry")
 app.add_typer(printer_app, name="printer")
 app.add_typer(label_app, name="label")
+app.add_typer(serve_app, name="serve")
+app.add_typer(db_app, name="db")
 
 
 def _context(ctx: typer.Context) -> Context:
