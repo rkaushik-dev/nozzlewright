@@ -54,6 +54,10 @@ class SimulatedPrinter:
     active_label: str = ""
     head_temperature_c: float = 32.5
     line_speed_mm_per_min: float = 0.0
+    # Products coded between two STATUS reads while the line runs. A real
+    # machine counts on the photocell; this counts on being asked, which is
+    # close enough for anything above the wire.
+    print_rate: int = 1
 
     # Bookkeeping the tests read.
     seen: list[str] = field(default_factory=list)
@@ -156,6 +160,8 @@ class SimulatedPrinter:
         return int(Status.OK), "FAM=%s,REV=%d,BUILD=%s" % (self.family, self.revision, self.build)
 
     def _do_status(self, args: list[str]) -> tuple[int, str]:
+        if self.state is MachineState.PRINTING:
+            self.printed += self.print_rate
         return int(Status.OK), (
             "STATE=%s,ALARMS=%X,PRINTED=%d,TEMP=%.1f,SPEED=%.0f,LABEL=%s"
             % (
