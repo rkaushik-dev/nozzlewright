@@ -21,7 +21,14 @@ TABLES = {
     "alarm_records",
     "label_revisions",
     "config_snapshots",
+    "job_runs",
 }
+
+# Asserting a literal revision here would mean editing this file every time a
+# migration lands, which is how a test starts being edited to match whatever the
+# code now does. The head is whatever ships; what matters is that upgrading gets
+# there and stays there.
+HEAD = head_revision("sqlite:///:memory:")
 
 
 def url_for(tmp_path: Path) -> str:
@@ -41,8 +48,9 @@ def test_the_config_points_at_our_scripts() -> None:
     assert config.get_main_option("sqlalchemy.url") == "sqlite:///:memory:"
 
 
-def test_the_head_is_the_first_revision() -> None:
-    assert head_revision("sqlite:///:memory:") == "0001_initial"
+def test_there_is_a_head_and_it_is_the_newest_script() -> None:
+    names = sorted(path.stem for path in (migrations_path() / "versions").glob("*.py"))
+    assert names[-1] == HEAD
 
 
 def test_a_fresh_database_has_no_revision(tmp_path: Path) -> None:
@@ -54,7 +62,7 @@ def test_a_fresh_database_has_no_revision(tmp_path: Path) -> None:
 def test_upgrade_creates_every_table(tmp_path: Path) -> None:
     url = url_for(tmp_path)
     engine = build_engine(url)
-    assert upgrade(engine, url) == "0001_initial"
+    assert upgrade(engine, url) == HEAD
     assert set(inspect(engine).get_table_names()) >= TABLES
     engine.dispose()
 
@@ -63,7 +71,7 @@ def test_upgrade_is_idempotent(tmp_path: Path) -> None:
     url = url_for(tmp_path)
     engine = build_engine(url)
     upgrade(engine, url)
-    assert upgrade(engine, url) == "0001_initial"
+    assert upgrade(engine, url) == HEAD
     engine.dispose()
 
 
@@ -89,7 +97,7 @@ def test_stamping_records_a_revision_without_running_it(tmp_path: Path) -> None:
     url = url_for(tmp_path)
     engine = build_engine(url)
     stamp(url)
-    assert current_revision(engine) == "0001_initial"
+    assert current_revision(engine) == HEAD
     assert "printers" not in inspect(engine).get_table_names()
     engine.dispose()
 
@@ -98,7 +106,7 @@ def test_a_stamped_database_is_left_alone(tmp_path: Path) -> None:
     url = url_for(tmp_path)
     engine = build_engine(url)
     stamp(url)
-    assert upgrade(engine, url) == "0001_initial"
+    assert upgrade(engine, url) == HEAD
     engine.dispose()
 
 

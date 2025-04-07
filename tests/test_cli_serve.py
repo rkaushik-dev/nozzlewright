@@ -11,8 +11,11 @@ from nozzlewright.cli.main import app
 from nozzlewright.cli.serve_commands import attach_lifespan, build_gateway
 from nozzlewright.fleet.registry import PrinterRecord, Registry
 from nozzlewright.settings import LinkSettings, SessionSettings, Settings
+from nozzlewright.storage.schema import head_revision
 
 runner = CliRunner(mix_stderr=False)
+
+HEAD = head_revision("sqlite:///:memory:")
 
 FAST = Settings(
     site_id="bench",
@@ -45,23 +48,23 @@ def test_db_status_on_a_fresh_directory(tmp_path: Path) -> None:
     result = invoke(tmp_path, "db", "status", "--json")
     body = json.loads(result.stdout)
     assert body["revision"] == "empty"
-    assert body["head"] == "0001_initial"
+    assert body["head"] == HEAD
     assert body["up_to_date"] is False
 
 
 def test_db_upgrade_then_status(tmp_path: Path) -> None:
     upgraded = invoke(tmp_path, "db", "upgrade")
-    assert "upgraded from empty to 0001_initial" in upgraded.stdout
+    assert ("upgraded from empty to %s" % HEAD) in upgraded.stdout
 
     body = json.loads(invoke(tmp_path, "db", "status", "--json").stdout)
-    assert body["revision"] == "0001_initial"
+    assert body["revision"] == HEAD
     assert body["up_to_date"] is True
 
 
 def test_db_upgrade_is_idempotent(tmp_path: Path) -> None:
     invoke(tmp_path, "db", "upgrade")
     again = invoke(tmp_path, "db", "upgrade")
-    assert "already at 0001_initial" in again.stdout
+    assert ("already at %s" % HEAD) in again.stdout
 
 
 def test_db_prune_on_an_empty_database(tmp_path: Path) -> None:

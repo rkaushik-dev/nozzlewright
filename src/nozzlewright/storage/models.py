@@ -41,6 +41,7 @@ __all__ = [
     "AlarmRecord",
     "Base",
     "ConfigSnapshot",
+    "JobRun",
     "LabelRevision",
     "PollSample",
     "Printer",
@@ -115,6 +116,9 @@ class Printer(Base):
         back_populates="printer", cascade="all, delete-orphan"
     )
     snapshots: Mapped[list[ConfigSnapshot]] = relationship(
+        back_populates="printer", cascade="all, delete-orphan"
+    )
+    jobs: Mapped[list[JobRun]] = relationship(
         back_populates="printer", cascade="all, delete-orphan"
     )
 
@@ -216,3 +220,40 @@ class ConfigSnapshot(Base):
 
     def __repr__(self) -> str:
         return "<ConfigSnapshot %s %s>" % (self.printer_pk, self.digest)
+
+
+class JobRun(Base):
+    """One print run, from the operator pressing start to whatever ended it.
+
+    Kept for as long as the products are on the market, not for as long as the
+    poll samples. A customer asking which machine coded a carton in March is
+    asking about this table, and pruning it on the same schedule as the readings
+    would answer them with nothing.
+    """
+
+    __tablename__ = "job_runs"
+    __table_args__ = (Index("ix_job_runs_printer_started", "printer_pk", "started_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    printer_pk: Mapped[int] = mapped_column(ForeignKey("printers.id", ondelete="CASCADE"))
+    label: Mapped[str] = mapped_column(String(24), index=True)
+    label_revision: Mapped[int] = mapped_column(Integer, default=0)
+    outcome: Mapped[str] = mapped_column(String(16), default="")
+    target: Mapped[int] = mapped_column(Integer, default=0)
+    printed: Mapped[int] = mapped_column(Integer, default=0)
+    started_counter: Mapped[int] = mapped_column(Integer, default=0)
+    started_at: Mapped[datetime] = mapped_column(UtcDateTime(), default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    elapsed_s: Mapped[float] = mapped_column(Float, default=0.0)
+    operator: Mapped[str] = mapped_column(String(32), default="")
+    detail: Mapped[str] = mapped_column(String(255), default="")
+
+    printer: Mapped[Printer] = relationship(back_populates="jobs")
+
+    @property
+    def short(self) -> bool:
+        """True when the run ended before it printed everything."""
+        return self.target > 0 and self.printed < self.target
+
+    def __repr__(self) -> str:
+        return "<JobRun %s %s %d/%d>" % (self.label, self.outcome, self.printed, self.target)

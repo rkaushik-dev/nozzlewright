@@ -23,16 +23,18 @@ from sqlalchemy.orm import Session
 from nozzlewright.errors import NozzlewrightError
 from nozzlewright.fleet.poller import PollResult
 from nozzlewright.fleet.registry import PrinterRecord
+from nozzlewright.printer.job import JobResult
 from nozzlewright.storage.models import (
     AlarmRecord,
     ConfigSnapshot,
+    JobRun,
     LabelRevision,
     PollSample,
     Printer,
     utcnow,
 )
 
-__all__ = ["AlarmRepo", "LabelRepo", "PrinterRepo", "SampleRepo", "SnapshotRepo"]
+__all__ = ["AlarmRepo", "JobRepo", "LabelRepo", "PrinterRepo", "SampleRepo", "SnapshotRepo"]
 
 
 class PrinterRepo:
@@ -323,3 +325,82 @@ class SnapshotRepo:
             .order_by(ConfigSnapshot.taken_at.desc())
             .limit(limit)
         ).all()
+
+
+class JobRepo:
+    """The print run table."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def record(
+        self,
+        printer: Printer,
+        result: JobResult,
+        *,
+        started_at: datetime | None = None,
+        finished_at: datetime | None = None,
+        operator: str = "",
+        label_revision: int = 0,
+    ) -> JobRun:
+        """Store one finished run."""
+        ended = finished_at or utcnow()
+        began = started_at or (ended - timedelta(seconds=result.elapsed_s))
+        run = JobRun(
+            printer_pk=printer.id,
+            label=result.label,
+            label_revision=label_revision,
+            outcome=result.outcome.value,
+            target=result.target,
+            printed=result.printed,
+            started_counter=result.started_counter,
+            started_at=began,
+            finished_at=ended,
+            elapsed_s=result.elapsed_s,
+            operator=operator,
+            detail=result.detail[:255],
+        )
+        self.session.add(run)
+        self.session.flush()
+        return run
+
+    def recent(self, printer_id: str, limit: int = 50) -> Sequence[JobRun]:
+        """The newest runs on one machine, newest first."""
+        return self.session.scalars(
+            select(JobRun)
+            .join(Printer)
+            .where(Printer.printer_id == printer_id)
+            .order_by(JobRun.started_at.desc())
+            .limit(limit)
+        ).all()
+
+    def for_label(self, label: str, limit: int = 50) -> Sequence[JobRun]:
+        """Every run of one label across the site, newest first."""
+        return self.session.scalars(
+            select(JobRun)
+            .where(JobRun.label == label)
+            .order_by(JobRun.started_at.desc())
+            .limit(limit)
+        ).all()
+
+    def between(self, start: datetime, end: datetime) -> Sequence[JobRun]:
+        """Runs that started inside a window, oldest first.
+
+        This is what a shift report is built from, which is why it spans the
+        whole site rather than one machine.
+        """
+        return self.session.scalars(
+            select(JobRun)
+            .where(JobRun.started_at >= start)
+            .where(JobRun.started_at <= end)
+            .order_by(JobRun.started_at)
+        ).all()
+
+    def printed_between(self, start: datetime, end: datetime) -> int:
+        """How many products the whole site coded in a window."""
+        total = self.session.scalar(
+            select(func.sum(JobRun.printed))
+            .where(JobRun.started_at >= start)
+            .where(JobRun.started_at <= end)
+        )
+        return int(total or 0)
