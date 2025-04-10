@@ -20,6 +20,7 @@ import typer
 
 from nozzlewright import __version__
 from nozzlewright.cli.context import Context
+from nozzlewright.cli.fleet_commands import fleet_app
 from nozzlewright.cli.label_commands import label_app
 from nozzlewright.cli.output import emit
 from nozzlewright.cli.printer_commands import printer_app
@@ -38,6 +39,7 @@ app.add_typer(printer_app, name="printer")
 app.add_typer(label_app, name="label")
 app.add_typer(serve_app, name="serve")
 app.add_typer(db_app, name="db")
+app.add_typer(fleet_app, name="fleet")
 
 
 def _context(ctx: typer.Context) -> Context:
