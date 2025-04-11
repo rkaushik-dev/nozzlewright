@@ -58,6 +58,9 @@ class SimulatedPrinter:
     # machine counts on the photocell; this counts on being asked, which is
     # close enough for anything above the wire.
     print_rate: int = 1
+    #: Field names the machine is waiting on for the active label.
+    pending_fields: tuple[str, ...] = ()
+    answered: dict[str, str] = field(default_factory=dict)
 
     # Bookkeeping the tests read.
     seen: list[str] = field(default_factory=list)
@@ -197,6 +200,22 @@ class SimulatedPrinter:
         self.state = MachineState.PAUSED
         return int(Status.OK), ""
 
+    # Interactive fields
+
+    def _do_askinter(self, args: list[str]) -> tuple[int, str]:
+        waiting = [name for name in self.pending_fields if name not in self.answered]
+        if not waiting:
+            return int(Status.OK), ""
+        return int(Status.OK), ";".join("NAME=%s" % name for name in waiting)
+
+    def _do_sendinter(self, args: list[str]) -> tuple[int, str]:
+        if len(args) != 2:
+            return int(Status.BAD_PARAM), ""
+        if args[0] not in self.pending_fields:
+            return int(Status.NOT_FOUND), ""
+        self.answered[args[0]] = args[1]
+        return int(Status.OK), ""
+
     # Labels
 
     def _do_enumlabels(self, args: list[str]) -> tuple[int, str]:
@@ -210,6 +229,9 @@ class SimulatedPrinter:
         if args[0] not in self.labels:
             return int(Status.NOT_FOUND), ""
         self.active_label = args[0]
+        # Selecting a label clears whatever was typed for the last one. Carrying
+        # answers across a label change is how a carton gets last week lot code.
+        self.answered.clear()
         return int(Status.OK), args[0]
 
     # Configuration
