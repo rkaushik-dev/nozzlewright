@@ -40,6 +40,7 @@ from sqlalchemy.types import TypeDecorator
 __all__ = [
     "AlarmRecord",
     "Base",
+    "CartridgeFitting",
     "ConfigSnapshot",
     "JobRun",
     "LabelRevision",
@@ -119,6 +120,9 @@ class Printer(Base):
         back_populates="printer", cascade="all, delete-orphan"
     )
     jobs: Mapped[list[JobRun]] = relationship(
+        back_populates="printer", cascade="all, delete-orphan"
+    )
+    cartridges: Mapped[list[CartridgeFitting]] = relationship(
         back_populates="printer", cascade="all, delete-orphan"
     )
 
@@ -257,3 +261,48 @@ class JobRun(Base):
 
     def __repr__(self) -> str:
         return "<JobRun %s %s %d/%d>" % (self.label, self.outcome, self.printed, self.target)
+
+
+class CartridgeFitting(Base):
+    """One cartridge in one pen position, from fitting to removal.
+
+    The row is opened when a serial appears in a pen and closed when it goes
+    away. That is the only way to answer the question a quality department
+    actually asks, which is never "how much ink is left" and always "which
+    cartridge printed this carton".
+
+    The level is the last one read, not a running total. The machine owns the
+    drop counter and it moves it whether or not this gateway was watching.
+    """
+
+    __tablename__ = "cartridge_fittings"
+    __table_args__ = (
+        Index("ix_cartridge_fittings_open", "printer_pk", "pen", "removed_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    printer_pk: Mapped[int] = mapped_column(ForeignKey("printers.id", ondelete="CASCADE"))
+    pen: Mapped[int] = mapped_column(Integer)
+    serial: Mapped[str] = mapped_column(String(32), index=True)
+    part_number: Mapped[str] = mapped_column(String(32), default="")
+    ink_family: Mapped[str] = mapped_column(String(16), default="")
+    fitted_at: Mapped[datetime] = mapped_column(UtcDateTime(), default=utcnow)
+    removed_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    first_level: Mapped[int] = mapped_column(Integer, default=100)
+    last_level: Mapped[int] = mapped_column(Integer, default=100)
+    readings: Mapped[int] = mapped_column(Integer, default=1)
+
+    printer: Mapped[Printer] = relationship(back_populates="cartridges")
+
+    @property
+    def fitted(self) -> bool:
+        """True while the cartridge is still in the machine."""
+        return self.removed_at is None
+
+    @property
+    def used_points(self) -> int:
+        """How far the level has fallen since it was fitted."""
+        return max(self.first_level - self.last_level, 0)
+
+    def __repr__(self) -> str:
+        return "<CartridgeFitting pen%d %s %d%%>" % (self.pen, self.serial, self.last_level)
