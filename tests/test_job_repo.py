@@ -60,8 +60,12 @@ def test_the_migration_creates_the_table(tmp_path: Path) -> None:
     engine.dispose()
 
 
-def test_the_head_moved_to_the_second_revision() -> None:
-    assert head_revision("sqlite:///:memory:") == "0002_job_runs"
+def test_the_job_run_migration_is_in_the_chain() -> None:
+    from nozzlewright.storage.schema import migrations_path
+
+    names = sorted(path.stem for path in (migrations_path() / "versions").glob("*.py"))
+    assert "0002_job_runs" in names
+    assert head_revision("sqlite:///:memory:") == names[-1]
 
 
 def test_a_run_is_recorded(session: Session) -> None:

@@ -90,10 +90,18 @@ def test_buffer_strips_boot_noise() -> None:
     assert buffer.dropped == 3
 
 
-def test_buffer_raises_when_out_of_sync() -> None:
+def test_buffer_resyncs_when_it_cannot_find_a_terminator() -> None:
     buffer = FrameBuffer()
-    with pytest.raises(FrameError, match="out of sync"):
-        list(buffer.feed(b"A" * (MAX_FRAME_BYTES + 8)))
+    assert list(buffer.feed(b"A" * (MAX_FRAME_BYTES + 8))) == []
+    assert buffer.resyncs == 1
+    assert list(buffer.feed(encode_frame("0:OK"))) == [b"0:OK"]
+
+
+def test_buffer_gives_up_on_a_link_that_never_syncs() -> None:
+    buffer = FrameBuffer(resync_limit=2)
+    with pytest.raises(FrameError, match="not speaking the protocol"):
+        for _ in range(3):
+            list(buffer.feed(b"A" * (MAX_FRAME_BYTES + 8)))
 
 
 def test_buffer_reset_counts_discarded() -> None:

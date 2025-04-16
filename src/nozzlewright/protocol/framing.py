@@ -99,11 +99,14 @@ class FrameBuffer:
     still comes out whole.
     """
 
-    __slots__ = ("_buffer", "_dropped", "_verify")
+    __slots__ = ("_buffer", "_dropped", "_limit", "_resyncs", "_run", "_verify")
 
-    def __init__(self, *, verify_checksum: bool = True) -> None:
+    def __init__(self, *, verify_checksum: bool = True, resync_limit: int = 4) -> None:
         self._buffer = bytearray()
         self._dropped = 0
+        self._resyncs = 0
+        self._run = 0
+        self._limit = max(1, resync_limit)
         self._verify = verify_checksum
 
     @property
@@ -116,10 +119,16 @@ class FrameBuffer:
         """Bytes discarded because they could never be part of a valid frame."""
         return self._dropped
 
+    @property
+    def resyncs(self) -> int:
+        """How many times the buffer has been thrown away to find a frame again."""
+        return self._resyncs
+
     def reset(self) -> None:
         """Throw away partial state. Called after every reconnect."""
         self._dropped += len(self._buffer)
         self._buffer.clear()
+        self._run = 0
 
     def feed(self, data: bytes) -> Iterator[bytes]:
         """Add ``data`` and yield every complete frame it finished."""
@@ -128,19 +137,38 @@ class FrameBuffer:
             index = self._buffer.find(b"\n")
             if index == -1:
                 if len(self._buffer) > MAX_FRAME_BYTES:
-                    raise FrameError(
-                        "no terminator inside %d bytes, link is out of sync" % MAX_FRAME_BYTES,
-                        raw=bytes(self._buffer[:64]),
-                    )
+                    self._resync()
+                    continue
                 return
             raw = bytes(self._buffer[:index])
             del self._buffer[: index + 1]
+            self._run = 0
             if raw.endswith(b"\r"):
                 raw = raw[:-1]
             frame = self._clean(raw)
             if frame is None:
                 continue
             yield frame
+
+    def _resync(self) -> None:
+        """Throw the buffer away and look for a frame again.
+
+        A printer that is booting sends a banner with no terminator in it, and
+        raising there takes the reader task down with a link that is about to
+        start working. So the first few of these are absorbed. What is not
+        absorbed is a link that never syncs, because that is a wiring fault and
+        silently swallowing it means a machine that looks idle forever.
+        """
+        self._dropped += len(self._buffer)
+        self._buffer.clear()
+        self._resyncs += 1
+        self._run += 1
+        if self._run >= self._limit:
+            self._run = 0
+            raise FrameError(
+                "no terminator in %d runs of %d bytes, the link is not speaking the protocol"
+                % (self._limit, MAX_FRAME_BYTES)
+            )
 
     def _clean(self, raw: bytes) -> bytes | None:
         """Drop noise, validate the checksum, hand back a usable payload."""
