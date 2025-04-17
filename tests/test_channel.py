@@ -8,7 +8,7 @@ import pytest
 from conftest import ScriptedPrinter, scripted_link
 from nozzlewright.errors import CommandRejected, DialectMismatch, LinkClosed, PrinterBusy
 from nozzlewright.protocol.dialects import REVISION_ONE, REVISION_TWO
-from nozzlewright.session.channel import Channel, QueueFull
+from nozzlewright.session.channel import Channel, Priority, QueueFull, priority_of
 from nozzlewright.settings import SessionSettings
 
 
@@ -240,5 +240,105 @@ async def test_stats_snapshot_has_every_counter(
         "timeouts",
         "rejected",
         "shed",
+        "displaced",
     }
     assert snapshot["sent"] >= 1
+
+
+async def test_urgent_commands_go_first(channel: tuple[Channel, ScriptedPrinter]) -> None:
+    made, printer = channel
+    printer.latency_s = 0.02
+    first = asyncio.create_task(made.send("STATUS"))
+    await asyncio.sleep(0.005)
+    routine = [asyncio.create_task(made.send("STATUS")) for _ in range(3)]
+    urgent = asyncio.create_task(made.send("STOPPRINT"))
+    await asyncio.gather(first, urgent, *routine)
+    verbs = [line.split(":", 1)[0] for line in printer.seen]
+    assert verbs.index("STOPPRINT") < verbs.index("STATUS", 2)
+
+
+def test_priorities_are_where_they_should_be() -> None:
+    assert priority_of("STOPPRINT") is Priority.URGENT
+    assert priority_of("PAUSEPRINT") is Priority.URGENT
+    assert priority_of("STATUS") is Priority.ROUTINE
+    assert priority_of("LABEL") is Priority.NORMAL
+
+
+def idle_channel(depth: int) -> Channel:
+    """A channel with a queue and no worker taking things off it."""
+    link, _ = scripted_link()
+    made = Channel(
+        transport=link,
+        settings=SessionSettings(queue_depth=depth, command_timeout_s=0.5, retries=0),
+    )
+    return made
+
+
+def queued(channel: Channel, verb: str, *args: object) -> object:
+    """Put one command on the queue without a worker to take it off."""
+    from nozzlewright.protocol.codec import build_request
+    from nozzlewright.session.channel import _Pending, priority_of
+
+    loop = asyncio.get_running_loop()
+    request = build_request(verb, *args)
+    pending = _Pending(
+        request=request,
+        future=loop.create_future(),
+        priority=priority_of(verb),
+        sequence=next(channel._sequence),
+    )
+    channel._enqueue(pending)
+    return pending
+
+
+async def test_a_full_queue_sheds_a_routine_command() -> None:
+    made = idle_channel(2)
+    first = queued(made, "STATUS")
+    queued(made, "STATUS")
+    queued(made, "STOPPRINT")
+
+    assert made.stats.displaced == 1
+    assert made.depth == 2
+    assert first.future.done()  # type: ignore[attr-defined]
+    with pytest.raises(QueueFull, match="displaced by STOPPRINT"):
+        first.future.result()  # type: ignore[attr-defined]
+
+
+async def test_the_oldest_routine_command_is_the_one_dropped() -> None:
+    made = idle_channel(3)
+    oldest = queued(made, "STATUS")
+    middle = queued(made, "STATUS")
+    newest = queued(made, "STATUS")
+    queued(made, "STOPPRINT")
+    assert oldest.future.done()  # type: ignore[attr-defined]
+    assert not middle.future.done()  # type: ignore[attr-defined]
+    assert not newest.future.done()  # type: ignore[attr-defined]
+
+
+async def test_a_queue_full_of_urgent_commands_refuses() -> None:
+    made = idle_channel(2)
+    queued(made, "STOPPRINT")
+    queued(made, "STOPPRINT")
+    with pytest.raises(QueueFull, match="outbound queue is at"):
+        queued(made, "PAUSEPRINT")
+    assert made.stats.shed == 1
+    assert made.stats.displaced == 0
+
+
+async def test_a_routine_command_does_not_displace_a_normal_one() -> None:
+    made = idle_channel(1)
+    queued(made, "LABEL", "carton")
+    with pytest.raises(QueueFull):
+        queued(made, "STATUS")
+    assert made.stats.displaced == 0
+
+
+async def test_an_urgent_command_comes_off_the_queue_first() -> None:
+    made = idle_channel(8)
+    queued(made, "STATUS")
+    queued(made, "LABEL", "carton")
+    queued(made, "STOPPRINT")
+    order = []
+    while made.depth:
+        order.append(made._queue.get_nowait().request.verb)
+    assert order == ["STOPPRINT", "LABEL", "STATUS"]

@@ -21,6 +21,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from dataclasses import dataclass, field
+from enum import IntEnum
+from itertools import count
 
 from nozzlewright.errors import CommandRejected, LinkClosed, PrinterBusy, NozzlewrightError
 from nozzlewright.protocol.codec import Request, Response, build_request, parse_response
@@ -30,9 +32,41 @@ from nozzlewright.protocol.status import Status, is_retryable
 from nozzlewright.settings import SessionSettings
 from nozzlewright.transport.base import Transport
 
-__all__ = ["Channel", "ChannelStats", "QueueFull"]
+__all__ = ["PRIORITY_FOR", "Channel", "ChannelStats", "Priority", "QueueFull"]
 
 KEEPALIVE_VERB = "PING"
+
+
+class Priority(IntEnum):
+    """How badly a command wants to go next.
+
+    A radio that manages eight commands a second and a wall board that refreshes
+    forty machines will fill the queue, and when it does it matters a great deal
+    which commands are lost. Stopping a line is not allowed to queue behind a
+    status poll that nobody is waiting for.
+    """
+
+    ROUTINE = 0
+    NORMAL = 1
+    URGENT = 2
+
+
+#: Verbs that do not get the default priority. Everything else is NORMAL.
+PRIORITY_FOR: dict[str, Priority] = {
+    "STOPPRINT": Priority.URGENT,
+    "PAUSEPRINT": Priority.URGENT,
+    "LOGOUT": Priority.URGENT,
+    "STATUS": Priority.ROUTINE,
+    "INK": Priority.ROUTINE,
+    "INK2": Priority.ROUTINE,
+    "STATISTICS": Priority.ROUTINE,
+    "PING": Priority.ROUTINE,
+}
+
+
+def priority_of(verb: str) -> Priority:
+    """How urgent one verb is."""
+    return PRIORITY_FOR.get(verb, Priority.NORMAL)
 
 
 class QueueFull(NozzlewrightError):
@@ -50,6 +84,7 @@ class ChannelStats:
     timeouts: int = 0
     rejected: int = 0
     shed: int = 0
+    displaced: int = 0
 
     def as_dict(self) -> dict[str, int]:
         """A plain mapping for logs and metrics."""
@@ -61,6 +96,7 @@ class ChannelStats:
             "timeouts": self.timeouts,
             "rejected": self.rejected,
             "shed": self.shed,
+            "displaced": self.displaced,
         }
 
 
@@ -72,6 +108,14 @@ class _Pending:
     future: asyncio.Future[Response]
     tries: int = 0
     raise_on_error: bool = True
+    priority: Priority = Priority.NORMAL
+    sequence: int = 0
+
+    def __lt__(self, other: _Pending) -> bool:
+        """Higher priority first, and inside a priority the oldest first."""
+        if self.priority != other.priority:
+            return self.priority > other.priority
+        return self.sequence < other.sequence
 
 
 @dataclass
@@ -84,7 +128,10 @@ class Channel:
 
     def __post_init__(self) -> None:
         self.stats = ChannelStats()
-        self._queue: asyncio.Queue[_Pending] = asyncio.Queue(maxsize=self.settings.queue_depth)
+        self._queue: asyncio.PriorityQueue[_Pending] = asyncio.PriorityQueue(
+            maxsize=self.settings.queue_depth
+        )
+        self._sequence = count()
         self._frames: asyncio.Queue[bytes] = asyncio.Queue()
         self._buffer = FrameBuffer(verify_checksum=self.dialect.verify_checksum)
         self._worker: asyncio.Task[None] | None = None
@@ -152,15 +199,60 @@ class Channel:
             request=request,
             future=loop.create_future(),
             raise_on_error=raise_on_error,
+            priority=priority_of(request.verb),
+            sequence=next(self._sequence),
         )
+        self._enqueue(pending)
+        return await asyncio.wait_for(pending.future, timeout=self._caller_budget)
+
+    def _enqueue(self, pending: _Pending) -> None:
+        """Put one command on the queue, shedding a routine one if it is full.
+
+        A full queue used to refuse whatever arrived last, which meant a wall
+        board refresh could stop an operator from stopping the line. Now a
+        routine command makes way for an urgent one, and only a queue full of
+        things at least as urgent refuses.
+        """
         try:
             self._queue.put_nowait(pending)
+            return
         except asyncio.QueueFull:
+            pass
+
+        victim = self._least_urgent()
+        if victim is None or not (pending < victim):
             self.stats.shed += 1
             raise QueueFull(
                 "outbound queue is at %d commands" % self.settings.queue_depth
             ) from None
-        return await asyncio.wait_for(pending.future, timeout=self._caller_budget)
+
+        self._drop(victim)
+        self.stats.displaced += 1
+        self._settle_error(
+            victim,
+            QueueFull("%s was displaced by %s" % (victim.request.verb, pending.request.verb)),
+        )
+        self._queue.put_nowait(pending)
+
+    def _least_urgent(self) -> _Pending | None:
+        """The queued command that would be dropped first.
+
+        Lowest priority, and among those the oldest. A status poll that has been
+        sitting in the queue is the stalest thing in it: the one behind it will
+        answer the same question with fresher numbers.
+        """
+        waiting = list(self._queue._queue)
+        if not waiting:
+            return None
+        return min(waiting, key=lambda item: (item.priority, item.sequence))
+
+    def _drop(self, victim: _Pending) -> None:
+        """Take one command back off the queue."""
+        waiting = [item for item in self._queue._queue if item is not victim]
+        self._queue._queue.clear()
+        for item in waiting:
+            self._queue._queue.append(item)
+        self._queue._unfinished_tasks -= 1
 
     @property
     def _caller_budget(self) -> float:
