@@ -16,34 +16,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from nozzlewright.errors import CommandRejected, ConfigError, PrinterBusy
-from nozzlewright.printer.cartridge import LOW_INK_PCT
 from nozzlewright.printer.config import ConfigDiff, PrinterConfig
+from nozzlewright.printer.ink import InkReading, parse_ink_rows
 from nozzlewright.printer.snapshot import parse_config_table
 from nozzlewright.printer.status import MachineState, PrinterStatus, parse_status
 from nozzlewright.session.supervisor import PrinterSession
 from nozzlewright.telemetry.logging import get_logger
 
-__all__ = ["ApplyReport", "InkLevel", "apply_config", "read_config", "read_ink", "read_status"]
+__all__ = ["ApplyReport", "apply_config", "read_config", "read_ink", "read_status"]
 
 _log = get_logger("nozzlewright.operations")
-
-
-@dataclass(frozen=True, slots=True)
-class InkLevel:
-    """One pen as the machine reports it."""
-
-    pen: int
-    percent: int
-
-    @property
-    def is_low(self) -> bool:
-        """True once this pen should be warned about."""
-        return self.percent <= LOW_INK_PCT
-
-    @property
-    def is_empty(self) -> bool:
-        """True when the machine says there is nothing left."""
-        return self.percent <= 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,16 +72,17 @@ async def read_config(session: PrinterSession) -> PrinterConfig:
     return config
 
 
-async def read_ink(session: PrinterSession) -> tuple[InkLevel, ...]:
-    """Read the ink table."""
-    response = await session.command("INK")
-    levels: list[InkLevel] = []
-    for row in response.table():
-        try:
-            levels.append(InkLevel(pen=int(row["PEN"]), percent=int(row["LVL"])))
-        except (KeyError, ValueError):
-            continue
-    return tuple(sorted(levels, key=lambda level: level.pen))
+async def read_ink(session: PrinterSession) -> tuple[InkReading, ...]:
+    """Read the ink table.
+
+    Uses INK2 where the machine has it, because that is the one that carries the
+    cartridge serial, and falls back to INK where it does not. The reading comes
+    back the same shape either way, with the serial simply absent.
+    """
+    dialect = session.dialect
+    verb = "INK2" if dialect is not None and dialect.supports("INK2") else "INK"
+    response = await session.command(verb)
+    return parse_ink_rows(response.table())
 
 
 async def apply_config(

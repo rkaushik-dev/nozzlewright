@@ -9,7 +9,8 @@ from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from nozzlewright.fleet.registry import PrinterRecord
-from nozzlewright.storage.cartridges import CartridgeRepo, InkReading, parse_ink_rows
+from nozzlewright.printer.ink import InkReading, parse_ink_rows
+from nozzlewright.storage.cartridges import CartridgeRepo
 from nozzlewright.storage.engine import build_engine, build_sessionmaker, create_all
 from nozzlewright.storage.repo import PrinterRepo
 from nozzlewright.storage.schema import upgrade
@@ -62,9 +63,15 @@ def test_levels_are_clamped() -> None:
     assert [item.level for item in readings] == [100, 0]
 
 
-def test_an_empty_pen_is_not_fitted() -> None:
+def test_an_empty_pen_is_not_identified() -> None:
+    assert not InkReading(pen=1, level=0).identified
+    assert InkReading(pen=1, level=0, serial="A1").identified
+
+
+def test_a_pen_with_a_level_and_no_serial_is_still_fitted() -> None:
+    # Revision one firmware never sends a serial, so a level alone has to count.
+    assert InkReading(pen=1, level=40).fitted
     assert not InkReading(pen=1, level=0).fitted
-    assert InkReading(pen=1, level=0, serial="A1").fitted
 
 
 def test_a_new_cartridge_opens_a_fitting(session: Session) -> None:

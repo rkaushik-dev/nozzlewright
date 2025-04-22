@@ -99,15 +99,16 @@ async def test_ink_levels_are_sorted_by_pen(session: tuple[PrinterSession, Bench
     live, _ = session
     levels = await read_ink(live)
     assert [level.pen for level in levels] == [1, 2]
-    assert all(0 <= level.percent <= 100 for level in levels)
+    assert all(0 <= level.level <= 100 for level in levels)
+    assert all(level.serial for level in levels)
 
 
 async def test_ink_level_flags() -> None:
-    from nozzlewright.printer.operations import InkLevel
+    from nozzlewright.printer.ink import InkReading
 
-    assert InkLevel(pen=1, percent=4).is_low
-    assert not InkLevel(pen=1, percent=40).is_low
-    assert InkLevel(pen=1, percent=0).is_empty
+    assert InkReading(pen=1, level=4).is_low
+    assert not InkReading(pen=1, level=40).is_low
+    assert InkReading(pen=1, level=0).is_empty
 
 
 async def test_applying_an_identical_config_changes_nothing(

@@ -69,7 +69,12 @@ def printer_ink(
         async with context.connected(printer_id) as session:
             levels = await read_ink(session)
         return [
-            {"pen": level.pen, "percent": level.percent, "low": level.is_low}
+            {
+                "pen": level.pen,
+                "percent": level.level,
+                "low": level.is_low,
+                "serial": level.serial or "-",
+            }
             for level in levels
         ]
 

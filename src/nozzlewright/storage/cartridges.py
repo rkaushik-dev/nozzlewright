@@ -19,52 +19,15 @@ than argued with, and the first level is reset so the usage figure stays honest.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from nozzlewright.printer.ink import InkReading
 from nozzlewright.storage.models import CartridgeFitting, Printer, utcnow
 
-__all__ = ["CartridgeRepo", "InkReading", "parse_ink_rows"]
-
-
-@dataclass(frozen=True, slots=True)
-class InkReading:
-    """One pen as INK2 reports it."""
-
-    pen: int
-    level: int
-    serial: str = ""
-    part_number: str = ""
-    ink_family: str = ""
-
-    @property
-    def fitted(self) -> bool:
-        """True when there is a cartridge in this position."""
-        return bool(self.serial)
-
-
-def parse_ink_rows(rows: list[dict[str, str]]) -> tuple[InkReading, ...]:
-    """Turn an INK2 table into readings, dropping anything unreadable."""
-    found: list[InkReading] = []
-    for row in rows:
-        try:
-            pen = int(row["PEN"])
-            level = int(row.get("LVL", "0"))
-        except (KeyError, ValueError):
-            continue
-        found.append(
-            InkReading(
-                pen=pen,
-                level=max(0, min(level, 100)),
-                serial=row.get("SER", "").strip(),
-                part_number=row.get("PART", "").strip(),
-                ink_family=row.get("INK", "").strip().upper(),
-            )
-        )
-    return tuple(sorted(found, key=lambda reading: reading.pen))
+__all__ = ["CartridgeRepo"]
 
 
 class CartridgeRepo:
@@ -114,7 +77,7 @@ class CartridgeRepo:
         for reading in readings:
             seen_pens.add(reading.pen)
             current = self.fitted(printer, reading.pen)
-            if not reading.fitted:
+            if not reading.identified:
                 if current is not None:
                     self._close(current, moment)
                     closed += 1

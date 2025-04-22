@@ -20,7 +20,8 @@ from nozzlewright.fleet.alarms import escalated
 from nozzlewright.fleet.poller import PollResult
 from nozzlewright.fleet.registry import PrinterRecord
 from nozzlewright.printer.config import PrinterConfig
-from nozzlewright.printer.operations import ApplyReport, InkLevel
+from nozzlewright.printer.ink import InkReading
+from nozzlewright.printer.operations import ApplyReport
 from nozzlewright.printer.status import PrinterStatus
 from nozzlewright.storage.models import AlarmRecord, LabelRevision
 
@@ -157,12 +158,19 @@ class InkOut(BaseModel):
     percent: int
     low: bool
     empty: bool
+    serial: str = ""
+    part_number: str = ""
 
     @classmethod
-    def from_domain(cls, level: InkLevel) -> InkOut:
-        """Build one from a decoded INK row."""
+    def from_domain(cls, level: InkReading) -> InkOut:
+        """Build one from a decoded ink row."""
         return cls(
-            pen=level.pen, percent=level.percent, low=level.is_low, empty=level.is_empty
+            pen=level.pen,
+            percent=level.level,
+            low=level.is_low,
+            empty=level.is_empty,
+            serial=level.serial,
+            part_number=level.part_number,
         )
 
 

@@ -61,6 +61,8 @@ class SimulatedPrinter:
     #: Field names the machine is waiting on for the active label.
     pending_fields: tuple[str, ...] = ()
     answered: dict[str, str] = field(default_factory=dict)
+    #: Serial per pen, for the revision two ink table.
+    cartridge_serials: dict[int, str] = field(default_factory=dict)
 
     # Bookkeeping the tests read.
     seen: list[str] = field(default_factory=list)
@@ -242,11 +244,24 @@ class SimulatedPrinter:
         return int(Status.OK), render_config_table(self.config)
 
     def _do_ink(self, args: list[str]) -> tuple[int, str]:
+        return int(Status.OK), ";".join(
+            "PEN=%d,LVL=%d" % (pen, level) for pen, level in self._levels()
+        )
+
+    def _do_ink2(self, args: list[str]) -> tuple[int, str]:
+        """The revision two table, which carries the cartridge serial."""
         rows = []
-        pens = 1 if self.config is None else self.config.head.pen_count
-        for pen in range(1, pens + 1):
-            rows.append("PEN=%d,LVL=%d" % (pen, max(100 - pen * 7, 0)))
+        for pen, level in self._levels():
+            serial = self.cartridge_serials.get(pen, "SIM%05d" % (pen * 1111))
+            rows.append(
+                "PEN=%d,LVL=%d,SER=%s,PART=SLX-2580,INK=MEK" % (pen, level, serial)
+            )
         return int(Status.OK), ";".join(rows)
+
+    def _levels(self) -> list[tuple[int, int]]:
+        """A plausible level per pen, falling with the pen number."""
+        pens = 1 if self.config is None else self.config.head.pen_count
+        return [(pen, max(100 - pen * 7, 0)) for pen in range(1, pens + 1)]
 
     def _do_minmax(self, args: list[str]) -> tuple[int, str]:
         return int(Status.OK), (
