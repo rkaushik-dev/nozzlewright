@@ -58,7 +58,7 @@ def _default_factory(address: str, channel: int) -> socket.socket:
     """Open a real RFCOMM socket to ``address`` on ``channel``."""
     if not rfcomm_available():
         raise TransportError("this platform has no bluetooth socket support")
-    family = socket.AF_BLUETOOTH  # type: ignore[attr-defined]
+    family = socket.AF_BLUETOOTH
     sock = socket.socket(family, socket.SOCK_STREAM, _BTPROTO_RFCOMM)
     sock.setblocking(False)
     return sock

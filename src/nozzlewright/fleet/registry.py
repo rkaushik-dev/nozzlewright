@@ -26,6 +26,13 @@ _MAX_ID = 32
 _ALLOWED_ID = set("abcdefghijklmnopqrstuvwxyz0123456789-_")
 
 
+def _tags_from(value: object) -> tuple[str, ...]:
+    """Read a tag list off disk, whatever shape it turned out to be."""
+    if not isinstance(value, list | tuple):
+        return ()
+    return tuple(str(tag) for tag in value)
+
+
 @dataclass(frozen=True, slots=True)
 class PrinterRecord:
     """One machine, as the site describes it."""
@@ -97,7 +104,7 @@ class PrinterRecord:
                 line=str(raw.get("line", "")),
                 description=str(raw.get("description", "")),
                 enabled=bool(raw.get("enabled", True)),
-                tags=tuple(str(tag) for tag in raw.get("tags", []) or ()),
+                tags=_tags_from(raw.get("tags")),
             )
         except KeyError as error:
             raise ConfigError("record", raw, "missing field %s" % error) from None

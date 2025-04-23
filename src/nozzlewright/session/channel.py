@@ -234,6 +234,15 @@ class Channel:
         )
         self._queue.put_nowait(pending)
 
+    def _waiting(self) -> list[_Pending]:
+        """The queued commands, in heap order.
+
+        asyncio.PriorityQueue has no public way to look at what is queued, and
+        shedding cannot be done without looking. Keeping the reach into the
+        internals in one place means one thing to fix if it ever moves.
+        """
+        return list(self._queue._queue)  # type: ignore[attr-defined]
+
     def _least_urgent(self) -> _Pending | None:
         """The queued command that would be dropped first.
 
@@ -241,18 +250,18 @@ class Channel:
         sitting in the queue is the stalest thing in it: the one behind it will
         answer the same question with fresher numbers.
         """
-        waiting = list(self._queue._queue)
+        waiting = self._waiting()
         if not waiting:
             return None
         return min(waiting, key=lambda item: (item.priority, item.sequence))
 
     def _drop(self, victim: _Pending) -> None:
         """Take one command back off the queue."""
-        waiting = [item for item in self._queue._queue if item is not victim]
-        self._queue._queue.clear()
-        for item in waiting:
-            self._queue._queue.append(item)
-        self._queue._unfinished_tasks -= 1
+        waiting = [item for item in self._waiting() if item is not victim]
+        heap = self._queue._queue  # type: ignore[attr-defined]
+        heap.clear()
+        heap.extend(waiting)
+        self._queue._unfinished_tasks -= 1  # type: ignore[attr-defined]
 
     @property
     def _caller_budget(self) -> float:

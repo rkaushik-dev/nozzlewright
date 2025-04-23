@@ -13,8 +13,9 @@ and they render those as noise.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Coroutine
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import typer
 
@@ -32,7 +33,11 @@ from nozzlewright.telemetry.logging import configure_logging
 
 __all__ = ["app", "main", "registry_app", "run"]
 
-app = typer.Typer(add_completion=False, help="Fleet control for Halvex coding printers.")
+T = TypeVar("T")
+
+app = typer.Typer(
+    add_completion=False, help="Fleet control for Halvex coding printers."
+)
 registry_app = typer.Typer(help="The list of machines on this site.")
 app.add_typer(registry_app, name="registry")
 app.add_typer(printer_app, name="printer")
@@ -148,7 +153,7 @@ def registry_enable(
     typer.echo("%s is now %s" % (record.printer_id, "enabled" if record.enabled else "disabled"))
 
 
-def run(coroutine: Any) -> Any:
+def run(coroutine: Coroutine[Any, Any, T]) -> T:
     """Run one coroutine and turn a domain error into a clean exit.
 
     Typer prints a traceback for anything that escapes, which is useless to a

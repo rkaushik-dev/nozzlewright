@@ -63,7 +63,7 @@ class Services:
 def get_services(request: Request) -> Services:
     """The services object the app was built with."""
     services = getattr(request.app.state, "services", None)
-    if services is None:
+    if not isinstance(services, Services):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="the app has no services"
         )

@@ -16,6 +16,7 @@ everything above.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from nozzlewright.printer.config import PrinterConfig
@@ -118,7 +119,9 @@ class SimulatedPrinter:
         if gate is not None:
             return gate
 
-        handler = getattr(self, "_do_" + verb.lower(), None)
+        handler: Callable[[list[str]], tuple[int, str]] | None = getattr(
+            self, "_do_" + verb.lower(), None
+        )
         if handler is not None:
             return handler(args)
         return self._setting(verb, args)

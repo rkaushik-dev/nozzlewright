@@ -16,6 +16,7 @@ be run for last Tuesday.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -176,9 +177,9 @@ def _inside(run: JobRun, start: datetime, end: datetime) -> bool:
 
 def _line_for(
     printer: Printer,
-    window: list[PollSample],
-    runs: list[JobRun],
-    alarms: list[AlarmRecord],
+    window: Sequence[PollSample],
+    runs: Sequence[JobRun],
+    alarms: Sequence[AlarmRecord],
 ) -> MachineLine:
     """Fold one machine's rows into a report line."""
     worst = ""

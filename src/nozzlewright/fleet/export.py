@@ -15,9 +15,9 @@ either way, and at least this way the mangling is visible.
 from __future__ import annotations
 
 import csv
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from datetime import datetime
-from typing import TextIO
+from typing import Protocol, TextIO
 
 from sqlalchemy.orm import Session
 
@@ -82,7 +82,14 @@ def _check(start: datetime, end: datetime) -> None:
         raise NozzlewrightError("an export window has to end after it starts")
 
 
-def _writer(handle: TextIO, columns: Iterable[str]) -> csv.writer:  # type: ignore[type-arg]
+class _Writer(Protocol):
+    """What the csv module hands back. There is no public type to name it."""
+
+    def writerow(self, row: Sequence[object]) -> object:
+        """Write one row."""
+
+
+def _writer(handle: TextIO, columns: Iterable[str]) -> _Writer:
     """A CSV writer with the line ending spreadsheets expect."""
     out = csv.writer(handle, lineterminator="\n")
     out.writerow(list(columns))

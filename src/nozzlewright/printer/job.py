@@ -24,6 +24,7 @@ import asyncio
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Protocol
 
 from nozzlewright.errors import CommandRejected, PrinterBusy, NozzlewrightError
 from nozzlewright.printer.operations import read_status
@@ -31,7 +32,21 @@ from nozzlewright.printer.status import MachineState, PrinterStatus, Severity
 from nozzlewright.session.supervisor import PrinterSession
 from nozzlewright.telemetry.logging import get_logger
 
-__all__ = ["JobOutcome", "JobResult", "JobSpec", "run_job"]
+__all__ = ["JobOutcome", "JobResult", "JobSpec", "ProgressHook", "run_job"]
+
+
+class ProgressHook(Protocol):
+    """Called after every progress read during a run.
+
+    Typed as a protocol rather than a Callable alias so the argument names show
+    up in an editor. Whoever writes a screen against this should not have to
+    read the source to find out which number is the target.
+    """
+
+    async def __call__(
+        self, printed: int, target: int, status: PrinterStatus
+    ) -> None:
+        """Report progress. Anything raised here ends the run."""
 
 _log = get_logger("nozzlewright.job")
 
@@ -113,7 +128,7 @@ async def run_job(
     session: PrinterSession,
     spec: JobSpec,
     *,
-    on_progress: object | None = None,
+    on_progress: ProgressHook | None = None,
 ) -> JobResult:
     """Select, start, watch and stop. Always leaves the machine stopped."""
     spec.validate()
@@ -142,7 +157,7 @@ async def run_job(
             status = await read_status(session)
             printed = max(status.printed - baseline, 0)
             if on_progress is not None:
-                await on_progress(printed, spec.quantity, status)  # type: ignore[operator]
+                await on_progress(printed, spec.quantity, status)
 
             if not spec.open_ended and printed >= spec.quantity:
                 break
