@@ -39,6 +39,7 @@ from sqlalchemy.types import TypeDecorator
 
 __all__ = [
     "AlarmRecord",
+    "AuditEntry",
     "Base",
     "CartridgeFitting",
     "ConfigSnapshot",
@@ -306,3 +307,32 @@ class CartridgeFitting(Base):
 
     def __repr__(self) -> str:
         return "<CartridgeFitting pen%d %s %d%%>" % (self.pen, self.serial, self.last_level)
+
+
+class AuditEntry(Base):
+    """One thing somebody did to a machine.
+
+    Separate from the poll samples on purpose. A sample is what the machine was
+    doing; this is what a person told it to do, and the two get asked about by
+    different people for different reasons. An auditor wants to know who changed
+    the firing voltage on the fourteenth. Nobody has ever asked that of a poll.
+
+    Rows are never updated and never pruned by the retention job. An audit trail
+    with a retention policy is not an audit trail.
+    """
+
+    __tablename__ = "audit_entries"
+    __table_args__ = (Index("ix_audit_entries_at_printer", "at", "printer_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    at: Mapped[datetime] = mapped_column(UtcDateTime(), default=utcnow, index=True)
+    actor: Mapped[str] = mapped_column(String(32), default="", index=True)
+    action: Mapped[str] = mapped_column(String(32), index=True)
+    printer_id: Mapped[str] = mapped_column(String(32), default="")
+    subject: Mapped[str] = mapped_column(String(64), default="")
+    before: Mapped[str] = mapped_column(String(255), default="")
+    after: Mapped[str] = mapped_column(String(255), default="")
+    detail: Mapped[str] = mapped_column(String(255), default="")
+
+    def __repr__(self) -> str:
+        return "<AuditEntry %s %s %s>" % (self.actor or "?", self.action, self.subject)
