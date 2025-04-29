@@ -57,6 +57,12 @@ line-length = 100
 target-version = "py311"
 src = ["src", "tests"]
 
+[tool.ruff.format]
+# Everything the formatter decides is a decision nobody has to make again.
+# Double quotes and trailing commas because that is what it does by default and
+# arguing with a formatter is how a team loses an afternoon.
+docstring-code-format = true
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF"]
 # B008 is the fastapi dependency idiom, which we use on purpose.

@@ -57,9 +57,7 @@ class Measurement:
         if self.columns <= 0:
             raise ConfigError("columns", self.columns, "a sample has to have columns in it")
         if self.measured_mm <= 0:
-            raise ConfigError(
-                "measured_mm", self.measured_mm, "measure the print, do not guess it"
-            )
+            raise ConfigError("measured_mm", self.measured_mm, "measure the print, do not guess it")
         if self.horizontal_dpi <= 0:
             raise ConfigError("horizontal_dpi", self.horizontal_dpi, "the firing rate is missing")
         if abs(self.error) > MAX_CORRECTION:
@@ -131,9 +129,7 @@ def suggest_encoder(
     the top of the speed range.
     """
     if line_speed_mm_per_min <= 0:
-        raise ConfigError(
-            "line_speed_mm_per_min", line_speed_mm_per_min, "a line has to be moving"
-        )
+        raise ConfigError("line_speed_mm_per_min", line_speed_mm_per_min, "a line has to be moving")
     if horizontal_dpi <= 0:
         raise ConfigError("horizontal_dpi", horizontal_dpi, "the firing rate is missing")
 

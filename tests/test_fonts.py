@@ -99,9 +99,7 @@ def test_measure_of_nothing_is_zero() -> None:
 
 
 def test_measure_with_no_spacing() -> None:
-    font = BitmapFont(
-        name="tight", height=3, glyphs={"I": compile_glyph("I", BAR)}, spacing=0
-    )
+    font = BitmapFont(name="tight", height=3, glyphs={"I": compile_glyph("I", BAR)}, spacing=0)
     assert font.measure("III") == 3
 
 

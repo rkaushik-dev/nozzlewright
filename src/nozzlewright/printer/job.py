@@ -43,10 +43,9 @@ class ProgressHook(Protocol):
     read the source to find out which number is the target.
     """
 
-    async def __call__(
-        self, printed: int, target: int, status: PrinterStatus
-    ) -> None:
+    async def __call__(self, printed: int, target: int, status: PrinterStatus) -> None:
         """Report progress. Anything raised here ends the run."""
+
 
 _log = get_logger("nozzlewright.job")
 

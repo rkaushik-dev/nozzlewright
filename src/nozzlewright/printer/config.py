@@ -155,9 +155,7 @@ class PrinterConfig:
                 "fieldbus", self.fieldbus.value, "protocol mode needs a fieldbus stack"
             )
         if self.print_mode is PrintMode.REPEAT and self.repeat_count < 1:
-            raise ConfigError(
-                "repeat_count", self.repeat_count, "repeat mode prints at least once"
-            )
+            raise ConfigError("repeat_count", self.repeat_count, "repeat mode prints at least once")
         if self.repeat_gap_mm < 0:
             raise ConfigError("repeat_gap_mm", self.repeat_gap_mm, "a gap cannot be negative")
 

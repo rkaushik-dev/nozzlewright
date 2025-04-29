@@ -22,7 +22,9 @@ class Bench:
 
     def __init__(self, **kwargs: object) -> None:
         self.machine = SimulatedPrinter(
-            labels={"carton": "x"}, print_rate=5, **kwargs  # type: ignore[arg-type]
+            labels={"carton": "x"},
+            print_rate=5,
+            **kwargs,  # type: ignore[arg-type]
         )
         self.session = PrinterSession(
             "line4",
@@ -168,9 +170,7 @@ async def test_an_alarm_can_be_ignored(bench: Bench) -> None:
         if printed >= 5:
             bench.machine.alarms |= Alarm.INK_LOW
 
-    result = await run_job(
-        bench.session, spec(quantity=20, stop_on_alarm=False), on_progress=hook
-    )
+    result = await run_job(bench.session, spec(quantity=20, stop_on_alarm=False), on_progress=hook)
     assert result.outcome is JobOutcome.COMPLETE
 
 

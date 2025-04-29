@@ -135,9 +135,7 @@ def test_listing_alarms(tmp_path: Path) -> None:
 
 def test_alarms_can_be_filtered(tmp_path: Path) -> None:
     seed(tmp_path)
-    body = json.loads(
-        invoke(tmp_path, "fleet", "alarms", "--printer-id", "line5", "--json").stdout
-    )
+    body = json.loads(invoke(tmp_path, "fleet", "alarms", "--printer-id", "line5", "--json").stdout)
     assert body == []
 
 

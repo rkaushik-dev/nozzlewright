@@ -145,6 +145,4 @@ async def _push(session: PrinterSession, diff: ConfigDiff, *, dry_run: bool) -> 
             continue
         applied.append(change.path)
 
-    return ApplyReport(
-        applied=tuple(applied), skipped=tuple(skipped), failed=tuple(failed)
-    )
+    return ApplyReport(applied=tuple(applied), skipped=tuple(skipped), failed=tuple(failed))

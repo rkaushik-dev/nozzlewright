@@ -38,9 +38,7 @@ def test_the_migration_creates_the_table(tmp_path: Path) -> None:
 
 def test_one_entry(session: Session) -> None:
     log = AuditLog(session, actor="mueller")
-    entry = log.record(
-        Action.LABEL_SELECTED, printer_id="line4", subject="carton", at=WHEN
-    )
+    entry = log.record(Action.LABEL_SELECTED, printer_id="line4", subject="carton", at=WHEN)
     assert entry.actor == "mueller"
     assert entry.action == "label.selected"
     assert entry.at == WHEN

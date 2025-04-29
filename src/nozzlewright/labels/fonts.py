@@ -108,9 +108,7 @@ class BitmapFont:
             return found
         substitute = self.glyphs.get(self.fallback)
         if substitute is None:
-            raise LabelError(
-                "font %s has no glyph for %r and no fallback" % (self.name, char)
-            )
+            raise LabelError("font %s has no glyph for %r and no fallback" % (self.name, char))
         return substitute
 
     def measure(self, text: str) -> int:

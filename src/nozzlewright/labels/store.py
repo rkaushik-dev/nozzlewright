@@ -216,8 +216,7 @@ class LabelStore:
             raise LabelError("a label name cannot be empty")
         if len(cleaned) > _MAX_NAME:
             raise LabelError(
-                "label name %r is longer than the %d the machine store allows"
-                % (name, _MAX_NAME)
+                "label name %r is longer than the %d the machine store allows" % (name, _MAX_NAME)
             )
         if not all(char.isalnum() or char in "-_." for char in cleaned):
             raise LabelError("label name %r has characters the machine store rejects" % (name,))

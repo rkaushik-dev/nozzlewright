@@ -56,7 +56,9 @@ class Bench:
 
     def __init__(self, **kwargs: object) -> None:
         self.printer = SimulatedPrinter(
-            config=base_config(), labels={"carton": "x"}, **kwargs  # type: ignore[arg-type]
+            config=base_config(),
+            labels={"carton": "x"},
+            **kwargs,  # type: ignore[arg-type]
         )
 
     def __call__(self) -> LoopbackTransport:

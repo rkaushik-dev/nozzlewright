@@ -69,9 +69,7 @@ def test_counter_options() -> None:
 
 
 def test_counter_wrap_is_optional() -> None:
-    label = parse_label(
-        "LABEL x 8\nFIELD n COUNTER wrap=1000\nTEXT t 0,0 n\nEND"
-    )
+    label = parse_label("LABEL x 8\nFIELD n COUNTER wrap=1000\nTEXT t 0,0 n\nEND")
     field = label.field("n")
     assert isinstance(field, CounterField)
     assert field.wrap_at == 1000

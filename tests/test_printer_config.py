@@ -143,9 +143,7 @@ def test_group_orientation_change() -> None:
     turned = HeadGeometry(
         family="HVX8PEN",
         groups=(
-            GroupGeometry(
-                index=1, pens=(PenGeometry(index=1),), orientation=Orientation.DOWN
-            ),
+            GroupGeometry(index=1, pens=(PenGeometry(index=1),), orientation=Orientation.DOWN),
         ),
     )
     diff = config().diff(config(head=turned))
@@ -156,9 +154,7 @@ def test_group_offset_and_spacing_changes() -> None:
     shifted = HeadGeometry(
         family="HVX8PEN",
         groups=(
-            GroupGeometry(
-                index=1, pens=(PenGeometry(index=1),), offset_dots=120, spacing_dots=4
-            ),
+            GroupGeometry(index=1, pens=(PenGeometry(index=1),), offset_dots=120, spacing_dots=4),
         ),
     )
     commands = dict(config().diff(config(head=shifted)).commands())

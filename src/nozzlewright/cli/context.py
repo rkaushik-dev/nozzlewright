@@ -52,9 +52,7 @@ def build_transport(
             number = int(port)
         except ValueError:
             raise ConfigError("endpoint", record.endpoint, "the port is not a number") from None
-        return TcpTransport(
-            host, number, connect_timeout_s=settings.link.connect_timeout_s
-        )
+        return TcpTransport(host, number, connect_timeout_s=settings.link.connect_timeout_s)
     if record.kind == "rfcomm":
         return RfcommTransport(
             record.endpoint,

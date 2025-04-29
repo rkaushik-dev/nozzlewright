@@ -92,14 +92,11 @@ def label_check(
         typer.echo("  field %s %s" % (field.name, type(field).__name__))
     for element in template.elements:
         typer.echo(
-            "  element %s at %d,%d"
-            % (element.name, element.placement.x, element.placement.y)
+            "  element %s at %d,%d" % (element.name, element.placement.x, element.placement.y)
         )
     interactive = template.interactive_fields()
     if interactive:
-        typer.echo(
-            "  needs answers for: %s" % ", ".join(item.name for item in interactive)
-        )
+        typer.echo("  needs answers for: %s" % ", ".join(item.name for item in interactive))
 
 
 @label_app.command("proof")
@@ -172,9 +169,7 @@ def label_save(
 
 
 @label_app.command("show")
-def label_show(
-    ctx: typer.Context, name: str = typer.Argument(..., help="Label to print.")
-) -> None:
+def label_show(ctx: typer.Context, name: str = typer.Argument(..., help="Label to print.")) -> None:
     """Print a stored label."""
     typer.echo(render_label_source(_store(ctx).load(name)), nl=False)
 

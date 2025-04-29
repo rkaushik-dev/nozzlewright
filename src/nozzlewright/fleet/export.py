@@ -113,9 +113,7 @@ def write_samples(
                 sample.alarms,
                 sample.printed,
                 "" if sample.head_temperature_c is None else sample.head_temperature_c,
-                ""
-                if sample.line_speed_mm_per_min is None
-                else sample.line_speed_mm_per_min,
+                "" if sample.line_speed_mm_per_min is None else sample.line_speed_mm_per_min,
                 round(sample.duration_s, 4),
                 sample.error,
             ]

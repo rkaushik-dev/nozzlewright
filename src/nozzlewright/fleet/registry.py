@@ -51,9 +51,7 @@ class PrinterRecord:
         if not cleaned:
             raise ConfigError("printer_id", self.printer_id, "a machine needs an id")
         if len(cleaned) > _MAX_ID:
-            raise ConfigError(
-                "printer_id", self.printer_id, "ids stop at %d characters" % _MAX_ID
-            )
+            raise ConfigError("printer_id", self.printer_id, "ids stop at %d characters" % _MAX_ID)
         if not set(cleaned) <= _ALLOWED_ID:
             raise ConfigError(
                 "printer_id",
@@ -65,9 +63,7 @@ class PrinterRecord:
         if self.kind not in ("tcp", "rfcomm", "loopback"):
             raise ConfigError("kind", self.kind, "the link kind is tcp, rfcomm or loopback")
         if self.kind == "tcp" and ":" not in self.endpoint:
-            raise ConfigError(
-                "endpoint", self.endpoint, "a tcp endpoint is host:port"
-            )
+            raise ConfigError("endpoint", self.endpoint, "a tcp endpoint is host:port")
         for tag in self.tags:
             if not tag.strip():
                 raise ConfigError("tags", self.tags, "a tag cannot be blank")
@@ -122,9 +118,7 @@ class Registry:
         tidy = record.normalised()
         tidy.validate()
         if tidy.printer_id in self.records and not replace_existing:
-            raise ConfigError(
-                "printer_id", tidy.printer_id, "that machine is already registered"
-            )
+            raise ConfigError("printer_id", tidy.printer_id, "that machine is already registered")
         self.records[tidy.printer_id] = tidy
         return tidy
 

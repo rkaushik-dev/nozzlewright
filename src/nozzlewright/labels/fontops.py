@@ -40,8 +40,7 @@ def scale_font(font: BitmapFont, *, wide: int = 1, tall: int = 1, name: str = ""
     height = font.height * tall
     if height > MAX_FONT_HEIGHT:
         raise LabelError(
-            "a %d high font scaled %dx is taller than the head can print"
-            % (font.height, tall)
+            "a %d high font scaled %dx is taller than the head can print" % (font.height, tall)
         )
     if wide == 1 and tall == 1:
         return font

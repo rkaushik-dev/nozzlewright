@@ -124,9 +124,7 @@ def printer_apply(
             dialect = session.dialect
             family = "HVX8PEN" if dialect is None else dialect.family
             target = parse_config_table(parse_table(payload), family=family)
-            report = await apply_config(
-                session, target, dry_run=dry_run, stop_first=stop_first
-            )
+            report = await apply_config(session, target, dry_run=dry_run, stop_first=stop_first)
         for path in report.applied:
             typer.echo("changed %s" % path)
         for path in report.skipped:

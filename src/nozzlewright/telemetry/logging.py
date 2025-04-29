@@ -33,9 +33,7 @@ _LOGIN_PATTERN = re.compile(
 _MASK = "****"
 
 
-def redact_secrets(
-    _logger: object, _name: str, event: dict[str, Any]
-) -> dict[str, Any]:
+def redact_secrets(_logger: object, _name: str, event: dict[str, Any]) -> dict[str, Any]:
     """Blank anything that looks like a credential.
 
     Runs over the event keys and over any string value that looks like a

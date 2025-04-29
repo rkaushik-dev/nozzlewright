@@ -136,9 +136,7 @@ def _check_height(template: LabelTemplate, head: HeadGeometry) -> list[Finding]:
     return []
 
 
-def _check_elements(
-    template: LabelTemplate, fonts: FontStore, head: HeadGeometry
-) -> list[Finding]:
+def _check_elements(template: LabelTemplate, fonts: FontStore, head: HeadGeometry) -> list[Finding]:
     """Per element checks that do not need the message rendered."""
     findings: list[Finding] = []
     for element in template.elements:
@@ -157,17 +155,13 @@ def _check_elements(
     return findings
 
 
-def _check_text(
-    element: TextElement, template: LabelTemplate, fonts: FontStore
-) -> list[Finding]:
+def _check_text(element: TextElement, template: LabelTemplate, fonts: FontStore) -> list[Finding]:
     """Font and glyph checks for one text element."""
     findings: list[Finding] = []
     try:
         font = fonts.get(element.font)
     except Exception:
-        return [
-            Finding(Grade.STOP, element.name, "font %s is not on this machine" % element.font)
-        ]
+        return [Finding(Grade.STOP, element.name, "font %s is not on this machine" % element.font)]
     if element.placement.y + font.height > template.height_dots:
         findings.append(
             Finding(
@@ -196,9 +190,7 @@ def _check_barcode(element: BarcodeElement, head: HeadGeometry) -> list[Finding]
     """Scannability checks for one barcode."""
     findings: list[Finding] = []
     if element.symbology.upper() != "CODE128":
-        findings.append(
-            Finding(Grade.STOP, element.name, "this machine only prints code 128")
-        )
+        findings.append(Finding(Grade.STOP, element.name, "this machine only prints code 128"))
         return findings
     if element.module_dots < MIN_SCANNABLE_MODULE:
         findings.append(
@@ -262,9 +254,7 @@ def _check_render(
     return findings
 
 
-def _worst_case_answers(
-    template: LabelTemplate, answers: dict[str, str] | None
-) -> dict[str, str]:
+def _worst_case_answers(template: LabelTemplate, answers: dict[str, str] | None) -> dict[str, str]:
     """Fill every prompt with the longest value it will take.
 
     A label is checked against the worst case rather than a typical one, because

@@ -159,9 +159,7 @@ class Rollout:
             try:
                 await apply_config(self.session(step.printer_id), step.before, stop_first=True)
             except (NozzlewrightError, OSError) as error:
-                _log.warning(
-                    "rollback failed", printer=step.printer_id, error=str(error)
-                )
+                _log.warning("rollback failed", printer=step.printer_id, error=str(error))
                 restored.append(step)
                 continue
             restored.append(

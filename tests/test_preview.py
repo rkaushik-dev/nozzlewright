@@ -62,9 +62,7 @@ def test_coverage_of_nothing() -> None:
 def test_ink_per_thousand_scales_with_the_drop() -> None:
     small = make_proof(parse_label(CARTON), fonts(), context(), drop_volume_pl=4.0)
     large = make_proof(parse_label(CARTON), fonts(), context(), drop_volume_pl=8.0)
-    assert large.millilitres_per_thousand() == pytest.approx(
-        small.millilitres_per_thousand() * 2
-    )
+    assert large.millilitres_per_thousand() == pytest.approx(small.millilitres_per_thousand() * 2)
 
 
 def test_the_summary_names_everything_worth_quoting() -> None:

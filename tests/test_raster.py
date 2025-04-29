@@ -69,9 +69,7 @@ def test_reverse_flips_the_glyph_order() -> None:
         label(TextElement(name="t", source="a"), fields=(TextField("a", "AB"),)), store()
     )
     backward = render_label(
-        label(
-            TextElement(name="t", source="a", reverse=True), fields=(TextField("a", "AB"),)
-        ),
+        label(TextElement(name="t", source="a", reverse=True), fields=(TextField("a", "AB"),)),
         store(),
     )
     assert forward.columns == list(reversed(backward.columns))
@@ -99,9 +97,7 @@ def test_text_that_runs_off_the_bottom_is_refused() -> None:
 
 
 def test_unknown_font_is_reported() -> None:
-    resolved = label(
-        TextElement(name="t", source="a", font="ghost"), fields=(TextField("a", "L"),)
-    )
+    resolved = label(TextElement(name="t", source="a", font="ghost"), fields=(TextField("a", "L"),))
     with pytest.raises(LabelError, match="no font called"):
         render_label(resolved, store())
 
@@ -211,36 +207,28 @@ def test_other_symbologies_are_refused() -> None:
 
 
 def test_options_invert_the_whole_message() -> None:
-    resolved = label(
-        TextElement(name="t", source="a"), fields=(TextField("a", "L"),), height=8
-    )
+    resolved = label(TextElement(name="t", source="a"), fields=(TextField("a", "L"),), height=8)
     plain = render_label(resolved, store())
     inverted = render_label(resolved, store(), RasterOptions(invert=True))
     assert inverted.dot_count() == plain.width * plain.height - plain.dot_count()
 
 
 def test_options_mirror_the_whole_message() -> None:
-    resolved = label(
-        TextElement(name="t", source="a"), fields=(TextField("a", "AB"),)
-    )
+    resolved = label(TextElement(name="t", source="a"), fields=(TextField("a", "AB"),))
     plain = render_label(resolved, store())
     mirrored = render_label(resolved, store(), RasterOptions(mirror=True))
     assert mirrored.columns == list(reversed(plain.columns))
 
 
 def test_options_flip_the_whole_message() -> None:
-    resolved = label(
-        TextElement(name="t", source="a"), fields=(TextField("a", "L"),), height=7
-    )
+    resolved = label(TextElement(name="t", source="a"), fields=(TextField("a", "L"),), height=7)
     plain = render_label(resolved, store())
     flipped = render_label(resolved, store(), RasterOptions(flip=True))
     assert flipped.to_rows() == list(reversed(plain.to_rows()))
 
 
 def test_width_limit_is_enforced() -> None:
-    resolved = label(
-        TextElement(name="t", source="a"), fields=(TextField("a", "A LONG MESSAGE"),)
-    )
+    resolved = label(TextElement(name="t", source="a"), fields=(TextField("a", "A LONG MESSAGE"),))
     with pytest.raises(LabelError, match="the limit is 20"):
         render_label(resolved, store(), RasterOptions(max_width_dots=20))
 

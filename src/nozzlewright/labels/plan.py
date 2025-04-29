@@ -97,9 +97,7 @@ def plan_for_group(matrix: DotMatrix, group: GroupGeometry) -> PrintPlan:
         first_row = pen.first_row - top + position * group.spacing_dots
         band = oriented.slice(first_row, pen.height_dots)
         lead = group.offset_dots + _lead_for(pen)
-        plans.append(
-            PenPlan(pen=pen.index, columns=tuple(band.columns), lead_columns=lead)
-        )
+        plans.append(PenPlan(pen=pen.index, columns=tuple(band.columns), lead_columns=lead))
     return PrintPlan(group=group.index, pens=tuple(plans))
 
 

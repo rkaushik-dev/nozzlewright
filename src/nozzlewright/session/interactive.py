@@ -78,9 +78,7 @@ class AnswerSheet:
             item.check(value)
         extra = set(answers) - {item.name for item in self.questions}
         if extra:
-            raise LabelError(
-                "the machine is not asking for: %s" % ", ".join(sorted(extra))
-            )
+            raise LabelError("the machine is not asking for: %s" % ", ".join(sorted(extra)))
 
     def summary(self) -> str:
         """One line for the log."""
@@ -123,9 +121,7 @@ async def answer(session: PrinterSession, sheet: AnswerSheet, answers: dict[str,
 def reconcile(asked: tuple[str, ...], template: LabelTemplate | None) -> AnswerSheet:
     """Line up what the machine asked with what the label declares."""
     if template is None:
-        return AnswerSheet(
-            questions=tuple(Question(name=name) for name in asked), unknown=asked
-        )
+        return AnswerSheet(questions=tuple(Question(name=name) for name in asked), unknown=asked)
 
     declared = {item.name: item for item in template.interactive_fields()}
     questions: list[Question] = []
@@ -138,9 +134,7 @@ def reconcile(asked: tuple[str, ...], template: LabelTemplate | None) -> AnswerS
             continue
         questions.append(_question_for(name, found))
     unused = tuple(sorted(set(declared) - set(asked)))
-    return AnswerSheet(
-        questions=tuple(questions), unknown=tuple(unknown), unused=unused
-    )
+    return AnswerSheet(questions=tuple(questions), unknown=tuple(unknown), unused=unused)
 
 
 def _question_for(name: str, declared: Field) -> Question:

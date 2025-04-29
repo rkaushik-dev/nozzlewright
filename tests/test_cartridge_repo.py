@@ -77,9 +77,7 @@ def test_a_pen_with_a_level_and_no_serial_is_still_fitted() -> None:
 def test_a_new_cartridge_opens_a_fitting(session: Session) -> None:
     printer = add_printer(session)
     repo = CartridgeRepo(session)
-    opened, closed = repo.observe(
-        printer, [InkReading(pen=1, level=100, serial="A1")], at=WHEN
-    )
+    opened, closed = repo.observe(printer, [InkReading(pen=1, level=100, serial="A1")], at=WHEN)
     assert (opened, closed) == (1, 0)
     row = repo.fitted(printer, 1)
     assert row is not None
@@ -153,12 +151,8 @@ def test_a_refill_resets_the_baseline(session: Session) -> None:
     printer = add_printer(session)
     repo = CartridgeRepo(session)
     repo.observe(printer, [InkReading(pen=1, level=90, serial="A1")], at=WHEN)
-    repo.observe(
-        printer, [InkReading(pen=1, level=20, serial="A1")], at=WHEN + timedelta(hours=1)
-    )
-    repo.observe(
-        printer, [InkReading(pen=1, level=95, serial="A1")], at=WHEN + timedelta(hours=2)
-    )
+    repo.observe(printer, [InkReading(pen=1, level=20, serial="A1")], at=WHEN + timedelta(hours=1))
+    repo.observe(printer, [InkReading(pen=1, level=95, serial="A1")], at=WHEN + timedelta(hours=2))
     row = repo.fitted(printer, 1)
     assert row is not None
     assert row.first_level == 95
@@ -171,9 +165,7 @@ def test_a_cartridge_moved_between_machines(session: Session) -> None:
     repo = CartridgeRepo(session)
     repo.observe(line4, [InkReading(pen=1, level=80, serial="A1")], at=WHEN)
     repo.observe(line4, [InkReading(pen=1, level=0)], at=WHEN + timedelta(hours=1))
-    repo.observe(
-        line5, [InkReading(pen=3, level=78, serial="A1")], at=WHEN + timedelta(hours=2)
-    )
+    repo.observe(line5, [InkReading(pen=3, level=78, serial="A1")], at=WHEN + timedelta(hours=2))
     history = repo.history("A1")
     assert len(history) == 2
     assert [row.pen for row in history] == [1, 3]

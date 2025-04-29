@@ -22,9 +22,7 @@ def factory() -> Iterator[sessionmaker[Session]]:
     create_all(engine)
     made = build_sessionmaker(engine)
     with made() as session:
-        PrinterRepo(session).upsert(
-            PrinterRecord(printer_id="line4", endpoint="10.4.0.21:9100")
-        )
+        PrinterRepo(session).upsert(PrinterRecord(printer_id="line4", endpoint="10.4.0.21:9100"))
         session.commit()
     yield made
     engine.dispose()

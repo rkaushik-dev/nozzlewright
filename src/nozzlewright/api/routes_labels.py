@@ -55,9 +55,7 @@ def list_revisions(name: str, session: Session = Depends(get_session)) -> list[L
 
 
 @router.put("/{name}", response_model=LabelOut, status_code=status.HTTP_201_CREATED)
-def put_label(
-    name: str, body: LabelIn, session: Session = Depends(get_session)
-) -> LabelOut:
+def put_label(name: str, body: LabelIn, session: Session = Depends(get_session)) -> LabelOut:
     """Store a label. Parsing it is the validation."""
     template = parse_label(body.source)
     if template.name != name:

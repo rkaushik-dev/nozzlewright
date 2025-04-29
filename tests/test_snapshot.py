@@ -146,7 +146,9 @@ def test_non_numeric_field_is_an_error() -> None:
 
 
 def test_group_naming_a_missing_pen_is_an_error() -> None:
-    rows = [row for row in rows_for(sample()) if not (row.get("SEC") == "PEN" and row["IDX"] == "2")]
+    rows = [
+        row for row in rows_for(sample()) if not (row.get("SEC") == "PEN" and row["IDX"] == "2")
+    ]
     with pytest.raises(ProtocolError, match="no PEN row follows"):
         parse_config_table(rows, family="HVX8PEN")
 

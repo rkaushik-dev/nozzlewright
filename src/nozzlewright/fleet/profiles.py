@@ -100,9 +100,7 @@ class Profile:
         if not cleaned:
             raise ConfigError("profile.name", self.name, "a profile needs a name")
         if len(cleaned) > _MAX_NAME:
-            raise ConfigError(
-                "profile.name", self.name, "names stop at %d characters" % _MAX_NAME
-            )
+            raise ConfigError("profile.name", self.name, "names stop at %d characters" % _MAX_NAME)
         if not self.tags and not self.lines and not self.printer_ids:
             raise ConfigError(
                 "profile",
@@ -123,9 +121,7 @@ class Profile:
 
     def select(self, registry: Registry) -> tuple[str, ...]:
         """Every machine on a site this profile is meant for, sorted."""
-        return tuple(
-            sorted(record.printer_id for record in registry.all() if self.matches(record))
-        )
+        return tuple(sorted(record.printer_id for record in registry.all() if self.matches(record)))
 
     def overrides_for(self, printer_id: str) -> tuple[Override, ...]:
         """The overrides that apply to one machine."""
@@ -165,9 +161,7 @@ class Profile:
         )
 
     @classmethod
-    def from_config(
-        cls, name: str, config: PrinterConfig, **kwargs: object
-    ) -> Profile:
+    def from_config(cls, name: str, config: PrinterConfig, **kwargs: object) -> Profile:
         """Build a profile around a live configuration."""
         return cls(
             name=name,
@@ -203,8 +197,7 @@ class ProfileStore:
             return ()
         return tuple(
             sorted(
-                path.name[: -len(PROFILE_SUFFIX)]
-                for path in self.root.glob("*" + PROFILE_SUFFIX)
+                path.name[: -len(PROFILE_SUFFIX)] for path in self.root.glob("*" + PROFILE_SUFFIX)
             )
         )
 

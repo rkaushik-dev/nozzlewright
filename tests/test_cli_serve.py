@@ -35,9 +35,7 @@ def site(tmp_path: Path, *ids: str) -> Path:
 
 
 def context(tmp_path: Path) -> Context:
-    return Context(
-        settings=FAST, state_dir=tmp_path, user="factory", pin="9999", simulate=True
-    )
+    return Context(settings=FAST, state_dir=tmp_path, user="factory", pin="9999", simulate=True)
 
 
 def invoke(tmp_path: Path, *args: str) -> object:
@@ -87,9 +85,7 @@ def test_building_a_gateway_from_the_context(tmp_path: Path) -> None:
 
 
 def test_no_keys_means_an_open_gateway(tmp_path: Path) -> None:
-    gateway = build_gateway(
-        context(tmp_path), poll_interval_s=1.0, retention_days=1, api_keys=""
-    )
+    gateway = build_gateway(context(tmp_path), poll_interval_s=1.0, retention_days=1, api_keys="")
     assert gateway.api_keys == frozenset()
 
 
@@ -140,9 +136,7 @@ async def test_the_metrics_endpoint(tmp_path: Path) -> None:
 
 
 async def test_the_metrics_endpoint_before_the_gateway_is_prepared(tmp_path: Path) -> None:
-    gateway = build_gateway(
-        context(tmp_path), poll_interval_s=1.0, retention_days=1, api_keys=""
-    )
+    gateway = build_gateway(context(tmp_path), poll_interval_s=1.0, retention_days=1, api_keys="")
     app_under_test = attach_lifespan(gateway, gateway.prepare())
     gateway.metrics = None
     transport = httpx.ASGITransport(app=app_under_test)

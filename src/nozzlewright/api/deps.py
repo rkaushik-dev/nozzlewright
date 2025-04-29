@@ -108,6 +108,4 @@ def get_printer_session(
     try:
         return services.session_for(printer_id)
     except NozzlewrightError as error:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(error)
-        ) from error
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error

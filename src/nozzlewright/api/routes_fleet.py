@@ -59,9 +59,7 @@ def fleet_summary(services: Services = Depends(get_services)) -> SiteOut:
     site = services.stats.site()
     worst = "info"
     if services.poller is not None:
-        severities = [
-            result.severity.value for result in services.poller.snapshot().values()
-        ]
+        severities = [result.severity.value for result in services.poller.snapshot().values()]
         for level in ("stop", "warning"):
             if level in severities:
                 worst = level

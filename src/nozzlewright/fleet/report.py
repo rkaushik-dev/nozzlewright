@@ -140,9 +140,7 @@ class ShiftReport:
         return "\n".join(lines)
 
 
-def build_report(
-    session: Session, site_id: str, start: datetime, end: datetime
-) -> ShiftReport:
+def build_report(session: Session, site_id: str, start: datetime, end: datetime) -> ShiftReport:
     """Build a report over one window."""
     if end <= start:
         raise NozzlewrightError("a report window has to end after it starts")
@@ -156,9 +154,7 @@ def build_report(
     for printer in printers:
         window = samples.between(printer.printer_id, start, end)
         runs = [
-            run
-            for run in jobs.recent(printer.printer_id, limit=500)
-            if _inside(run, start, end)
+            run for run in jobs.recent(printer.printer_id, limit=500) if _inside(run, start, end)
         ]
         raised = [
             row

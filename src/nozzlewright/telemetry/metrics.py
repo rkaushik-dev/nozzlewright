@@ -159,6 +159,4 @@ class Metrics:
 
     def value(self, name: str, printer_id: str) -> float | None:
         """One sample, by name. Used by the tests and the health page."""
-        return self.registry.get_sample_value(
-            name, {"site": self.site_id, "printer": printer_id}
-        )
+        return self.registry.get_sample_value(name, {"site": self.site_id, "printer": printer_id})

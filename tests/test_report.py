@@ -67,9 +67,7 @@ def busy_shift(session: Session) -> None:
     for step in range(8):
         at = START + timedelta(hours=step)
         samples.record(good, sample("line4"), at=at)
-        samples.record(
-            bad, sample("line5") if step < 4 else dead("line5"), at=at
-        )
+        samples.record(bad, sample("line5") if step < 4 else dead("line5"), at=at)
     jobs = JobRepo(session)
     jobs.record(good, run(1200, 1200), started_at=START + timedelta(hours=1))
     jobs.record(good, run(800, 800), started_at=START + timedelta(hours=4))
@@ -118,7 +116,9 @@ def test_utilisation_counts_printing(session: Session) -> None:
     printer = add_printer(session, "line4")
     samples = SampleRepo(session)
     samples.record(printer, sample("line4", state=MachineState.PRINTING), at=START)
-    samples.record(printer, sample("line4", state=MachineState.READY), at=START + timedelta(hours=1))
+    samples.record(
+        printer, sample("line4", state=MachineState.READY), at=START + timedelta(hours=1)
+    )
     report = build_report(session, "bench", START, END)
     assert report.machines[0].utilisation == pytest.approx(0.5)
 

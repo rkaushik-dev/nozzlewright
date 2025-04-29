@@ -147,9 +147,7 @@ async def printer_config(
     repo = PrinterRepo(session)
     row = repo.get(printer_id)
     if row is not None:
-        SnapshotRepo(session).take(
-            row, payload, _digest(payload), reason="api read"
-        )
+        SnapshotRepo(session).take(row, payload, _digest(payload), reason="api read")
     return ConfigOut.from_domain(printer_id, config, payload)
 
 

@@ -121,9 +121,7 @@ def test_context_credentials() -> None:
 
 
 def test_transport_for_a_tcp_record() -> None:
-    link = build_transport(
-        PrinterRecord(printer_id="line4", endpoint="10.4.0.21:9100"), Settings()
-    )
+    link = build_transport(PrinterRecord(printer_id="line4", endpoint="10.4.0.21:9100"), Settings())
     assert isinstance(link, TcpTransport)
     assert link.port == 9100
 
@@ -145,6 +143,4 @@ def test_transport_for_a_loopback_record() -> None:
 
 def test_a_tcp_endpoint_without_a_port() -> None:
     with pytest.raises(ConfigError, match="port is not a number"):
-        build_transport(
-            PrinterRecord(printer_id="line4", endpoint="10.4.0.21:none"), Settings()
-        )
+        build_transport(PrinterRecord(printer_id="line4", endpoint="10.4.0.21:none"), Settings())

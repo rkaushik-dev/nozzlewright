@@ -187,9 +187,7 @@ async def test_wait_ready_times_out_on_a_dead_bench() -> None:
         link.drop_after(0)
         return link
 
-    session = PrinterSession(
-        "line9", dead, link_settings=FAST_LINK, session_settings=FAST_SESSION
-    )
+    session = PrinterSession("line9", dead, link_settings=FAST_LINK, session_settings=FAST_SESSION)
     await session.start()
     assert not await session.wait_ready(0.3)
     await session.stop()

@@ -34,7 +34,10 @@ def radio() -> PairedRadio:
 
 def link_to(radio: PairedRadio, **kwargs: object) -> RfcommTransport:
     return RfcommTransport(
-        PRINTER, socket_factory=radio.factory, connect=False, **kwargs  # type: ignore[arg-type]
+        PRINTER,
+        socket_factory=radio.factory,
+        connect=False,
+        **kwargs,  # type: ignore[arg-type]
     )
 
 

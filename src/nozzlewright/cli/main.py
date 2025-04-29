@@ -35,9 +35,7 @@ __all__ = ["app", "main", "registry_app", "run"]
 
 T = TypeVar("T")
 
-app = typer.Typer(
-    add_completion=False, help="Fleet control for Halvex coding printers."
-)
+app = typer.Typer(add_completion=False, help="Fleet control for Halvex coding printers.")
 registry_app = typer.Typer(help="The list of machines on this site.")
 app.add_typer(registry_app, name="registry")
 app.add_typer(printer_app, name="printer")
@@ -66,9 +64,7 @@ def root(
     """Set up the shared context before any command runs."""
     settings = load_settings()
     configure_logging(level=log_level, fmt=settings.log_format)
-    ctx.obj = Context(
-        settings=settings, state_dir=state_dir, user=user, pin=pin, simulate=simulate
-    )
+    ctx.obj = Context(settings=settings, state_dir=state_dir, user=user, pin=pin, simulate=simulate)
 
 
 @app.command()

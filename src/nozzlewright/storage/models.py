@@ -135,9 +135,7 @@ class PollSample(Base):
     """One reading of one machine."""
 
     __tablename__ = "poll_samples"
-    __table_args__ = (
-        Index("ix_poll_samples_printer_at", "printer_pk", "at"),
-    )
+    __table_args__ = (Index("ix_poll_samples_printer_at", "printer_pk", "at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     printer_pk: Mapped[int] = mapped_column(ForeignKey("printers.id", ondelete="CASCADE"))
@@ -161,9 +159,7 @@ class AlarmRecord(Base):
     """One alarm from the poll that raised it to the poll that cleared it."""
 
     __tablename__ = "alarm_records"
-    __table_args__ = (
-        Index("ix_alarm_records_open", "printer_pk", "cleared_at"),
-    )
+    __table_args__ = (Index("ix_alarm_records_open", "printer_pk", "cleared_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     printer_pk: Mapped[int] = mapped_column(ForeignKey("printers.id", ondelete="CASCADE"))
@@ -209,9 +205,7 @@ class ConfigSnapshot(Base):
     """A machine configuration as it was at one moment."""
 
     __tablename__ = "config_snapshots"
-    __table_args__ = (
-        Index("ix_config_snapshots_printer_at", "printer_pk", "taken_at"),
-    )
+    __table_args__ = (Index("ix_config_snapshots_printer_at", "printer_pk", "taken_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     printer_pk: Mapped[int] = mapped_column(ForeignKey("printers.id", ondelete="CASCADE"))
@@ -277,9 +271,7 @@ class CartridgeFitting(Base):
     """
 
     __tablename__ = "cartridge_fittings"
-    __table_args__ = (
-        Index("ix_cartridge_fittings_open", "printer_pk", "pen", "removed_at"),
-    )
+    __table_args__ = (Index("ix_cartridge_fittings_open", "printer_pk", "pen", "removed_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     printer_pk: Mapped[int] = mapped_column(ForeignKey("printers.id", ondelete="CASCADE"))

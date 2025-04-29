@@ -255,15 +255,12 @@ class LabelTemplate:
         for element in self.elements:
             element.validate()
             if element.name in seen_elements:
-                raise LabelError(
-                    "label %s declares element %s twice" % (self.name, element.name)
-                )
+                raise LabelError("label %s declares element %s twice" % (self.name, element.name))
             seen_elements.add(element.name)
             source = element.source_field
             if source and source not in seen_fields:
                 raise LabelError(
-                    "element %s draws from field %s which is not declared"
-                    % (element.name, source)
+                    "element %s draws from field %s which is not declared" % (element.name, source)
                 )
             if element.placement.y >= self.height_dots:
                 raise LabelError(
@@ -274,8 +271,7 @@ class LabelTemplate:
         unused = seen_fields - {element.source_field for element in self.elements}
         if unused:
             raise LabelError(
-                "label %s declares fields nothing uses: %s"
-                % (self.name, ", ".join(sorted(unused)))
+                "label %s declares fields nothing uses: %s" % (self.name, ", ".join(sorted(unused)))
             )
 
     def resolve(self, context: FieldContext) -> ResolvedLabel:

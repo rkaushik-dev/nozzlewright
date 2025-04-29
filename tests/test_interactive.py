@@ -30,9 +30,7 @@ PLAIN = "LABEL plain 8\nFIELD a TEXT HELLO\nTEXT t 0,0 a\nEND\n"
 
 class Bench:
     def __init__(self, *fields: str) -> None:
-        self.machine = SimulatedPrinter(
-            labels={"asked": "x"}, pending_fields=tuple(fields)
-        )
+        self.machine = SimulatedPrinter(labels={"asked": "x"}, pending_fields=tuple(fields))
         self.session = PrinterSession(
             "line4",
             lambda: LoopbackTransport(self.machine, endpoint="sim"),

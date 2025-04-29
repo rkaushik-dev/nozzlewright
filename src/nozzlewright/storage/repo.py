@@ -134,9 +134,7 @@ class SampleRepo:
             .limit(limit)
         ).all()
 
-    def between(
-        self, printer_id: str, start: datetime, end: datetime
-    ) -> Sequence[PollSample]:
+    def between(self, printer_id: str, start: datetime, end: datetime) -> Sequence[PollSample]:
         """Readings inside a window, oldest first."""
         return self.session.scalars(
             select(PollSample)
@@ -246,9 +244,7 @@ class LabelRepo:
     def revisions(self, name: str) -> Sequence[LabelRevision]:
         """Every revision of one label, oldest first."""
         return self.session.scalars(
-            select(LabelRevision)
-            .where(LabelRevision.name == name)
-            .order_by(LabelRevision.revision)
+            select(LabelRevision).where(LabelRevision.name == name).order_by(LabelRevision.revision)
         ).all()
 
     def names(self) -> Sequence[str]:

@@ -164,8 +164,7 @@ class CounterField(Field):
             raise LabelError("counter %s needs a single pad character" % self.name)
         if self.wrap_at is not None and self.wrap_at <= self.start:
             raise LabelError(
-                "counter %s wraps at %d which is at or below its start"
-                % (self.name, self.wrap_at)
+                "counter %s wraps at %d which is at or below its start" % (self.name, self.wrap_at)
             )
 
     def render(self, context: FieldContext) -> str:
@@ -304,9 +303,7 @@ class PromptField(Field):
         if len(self.default) > self.max_len:
             raise LabelError("prompt %s has a default longer than its limit" % self.name)
         if self.required and self.default:
-            raise LabelError(
-                "prompt %s is required and also has a default, pick one" % self.name
-            )
+            raise LabelError("prompt %s is required and also has a default, pick one" % self.name)
 
     def render(self, context: FieldContext) -> str:
         given = context.prompt(self.name)

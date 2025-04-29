@@ -250,9 +250,7 @@ async def test_a_dry_run_changes_nothing(harness: Harness) -> None:
 
 async def test_a_broken_config_payload(harness: Harness) -> None:
     async with client_for(harness) as client:
-        response = await client.post(
-            "/printers/line4/config", json={"payload": "SEC=NONSENSE"}
-        )
+        response = await client.post("/printers/line4/config", json={"payload": "SEC=NONSENSE"})
     assert response.status_code == 502
     assert response.json()["error"] == "ProtocolError"
 
@@ -354,9 +352,7 @@ async def test_fleet_alarms_and_acknowledgement(harness: Harness) -> None:
         listed = await client.get("/fleet/alarms")
         assert [item["name"] for item in listed.json()] == ["INK_LOW"]
 
-        acked = await client.post(
-            "/fleet/alarms/line4/INK_LOW/ack", params={"who": "mueller"}
-        )
+        acked = await client.post("/fleet/alarms/line4/INK_LOW/ack", params={"who": "mueller"})
         assert acked.status_code == 200
         assert acked.json()["acknowledged_by"] == "mueller"
 
@@ -381,9 +377,7 @@ async def test_a_key_is_required_once_one_is_set() -> None:
     try:
         async with client_for(bench) as client:
             assert (await client.get("/printers")).status_code == 401
-            allowed = await client.get(
-                "/printers", headers={API_KEY_HEADER: "secret-key"}
-            )
+            allowed = await client.get("/printers", headers={API_KEY_HEADER: "secret-key"})
             assert allowed.status_code == 200
             wrong = await client.get("/printers", headers={API_KEY_HEADER: "nope"})
             assert wrong.status_code == 401

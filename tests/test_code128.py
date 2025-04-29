@@ -128,9 +128,7 @@ def test_symbol_ends_with_a_bar() -> None:
 def test_width_matches_the_module_list() -> None:
     for data in ("LOT", "1234567890", "A1B2C3", "HALVEX-4417"):
         assert width_in_modules(data) == len(modules_for(data))
-        assert width_in_modules(data, quiet_zone=False) == len(
-            modules_for(data, quiet_zone=False)
-        )
+        assert width_in_modules(data, quiet_zone=False) == len(modules_for(data, quiet_zone=False))
 
 
 def test_set_c_is_actually_narrower() -> None:

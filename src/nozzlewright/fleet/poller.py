@@ -105,9 +105,7 @@ class FleetPoller:
 
     def unreachable(self) -> tuple[str, ...]:
         """Machines whose last reading failed, sorted."""
-        return tuple(
-            sorted(key for key, result in self._results.items() if not result.reachable)
-        )
+        return tuple(sorted(key for key, result in self._results.items() if not result.reachable))
 
     def session(self, printer_id: str) -> PrinterSession:
         """The live session for one machine."""

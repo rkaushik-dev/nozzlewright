@@ -66,9 +66,7 @@ def test_a_profile_that_matches_nothing_is_refused() -> None:
 
 
 def test_a_profile_with_a_broken_configuration_is_refused() -> None:
-    broken = Profile(
-        name="bad", family="HVX8PEN", payload="SEC=NONSENSE", tags=("carton",)
-    )
+    broken = Profile(name="bad", family="HVX8PEN", payload="SEC=NONSENSE", tags=("carton",))
     with pytest.raises(ProtocolError, match="not one we know"):
         broken.validate()
 

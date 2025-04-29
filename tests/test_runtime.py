@@ -68,9 +68,7 @@ async def test_run_until_stopped_starts_and_stops() -> None:
         events.append("stop")
 
     asked = Shutdown()
-    runner = asyncio.create_task(
-        run_until_stopped(start, stop, asked, install_signals=False)
-    )
+    runner = asyncio.create_task(run_until_stopped(start, stop, asked, install_signals=False))
     await asyncio.sleep(0.01)
     assert events == ["start"]
     asked.request("test asked")
@@ -116,9 +114,7 @@ async def test_cancelling_the_runner_still_stops() -> None:
         events.append("stop")
 
     asked = Shutdown()
-    runner = asyncio.create_task(
-        run_until_stopped(start, stop, asked, install_signals=False)
-    )
+    runner = asyncio.create_task(run_until_stopped(start, stop, asked, install_signals=False))
     await asyncio.sleep(0.01)
     runner.cancel()
     with pytest.raises(asyncio.CancelledError):

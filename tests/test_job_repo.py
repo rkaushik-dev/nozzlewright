@@ -124,9 +124,7 @@ def test_recent_is_newest_first(session: Session) -> None:
     printer = add_printer(session)
     repo = JobRepo(session)
     for step in range(4):
-        repo.record(
-            printer, result(printed=step), started_at=WHEN + timedelta(hours=step)
-        )
+        repo.record(printer, result(printed=step), started_at=WHEN + timedelta(hours=step))
     assert [run.printed for run in repo.recent("line4", limit=2)] == [3, 2]
 
 
@@ -140,9 +138,7 @@ def test_runs_are_per_machine(session: Session) -> None:
 def test_runs_by_label_span_the_site(session: Session) -> None:
     repo = JobRepo(session)
     repo.record(add_printer(session, "line4"), result(), started_at=WHEN)
-    repo.record(
-        add_printer(session, "line5"), result(), started_at=WHEN + timedelta(hours=1)
-    )
+    repo.record(add_printer(session, "line5"), result(), started_at=WHEN + timedelta(hours=1))
     assert len(repo.for_label("carton")) == 2
     assert repo.for_label("ghost") == []
 
@@ -151,9 +147,7 @@ def test_runs_in_a_window(session: Session) -> None:
     printer = add_printer(session)
     repo = JobRepo(session)
     for step in range(5):
-        repo.record(
-            printer, result(printed=100), started_at=WHEN + timedelta(hours=step)
-        )
+        repo.record(printer, result(printed=100), started_at=WHEN + timedelta(hours=step))
     inside = repo.between(WHEN + timedelta(hours=1), WHEN + timedelta(hours=3))
     assert len(inside) == 3
 

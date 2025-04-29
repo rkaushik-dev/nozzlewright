@@ -256,9 +256,7 @@ class SimulatedPrinter:
         rows = []
         for pen, level in self._levels():
             serial = self.cartridge_serials.get(pen, "SIM%05d" % (pen * 1111))
-            rows.append(
-                "PEN=%d,LVL=%d,SER=%s,PART=SLX-2580,INK=MEK" % (pen, level, serial)
-            )
+            rows.append("PEN=%d,LVL=%d,SER=%s,PART=SLX-2580,INK=MEK" % (pen, level, serial))
         return int(Status.OK), ";".join(rows)
 
     def _levels(self) -> list[tuple[int, int]]:
@@ -267,6 +265,4 @@ class SimulatedPrinter:
         return [(pen, max(100 - pen * 7, 0)) for pen in range(1, pens + 1)]
 
     def _do_minmax(self, args: list[str]) -> tuple[int, str]:
-        return int(Status.OK), (
-            "NAME=HORZRES,MIN=75,MAX=600;NAME=FIRINGVOL,MIN=6000,MAX=14000"
-        )
+        return int(Status.OK), ("NAME=HORZRES,MIN=75,MAX=600;NAME=FIRINGVOL,MIN=6000,MAX=14000")
