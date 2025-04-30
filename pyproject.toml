@@ -39,6 +39,7 @@ dev = [
     "ruff==0.9.6",
     "mypy==1.15.0",
     "httpx==0.28.1",
+    "pytest-cov==6.0.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -51,6 +52,16 @@ nozzlewright = ["py.typed", "storage/migrations/*.py", "storage/migrations/versi
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["nozzlewright"]
+branch = true
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
 
 [tool.ruff]
 line-length = 100
