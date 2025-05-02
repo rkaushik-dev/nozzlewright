@@ -64,6 +64,11 @@ class SimulatedPrinter:
     answered: dict[str, str] = field(default_factory=dict)
     #: Serial per pen, for the revision two ink table.
     cartridge_serials: dict[int, str] = field(default_factory=dict)
+    #: The machine's own life counters, which never reset on their own.
+    powered_hours: int = 812
+    purges: int = 14
+    faults: int = 2
+    starts: int = 0
 
     # Bookkeeping the tests read.
     seen: list[str] = field(default_factory=list)
@@ -183,7 +188,17 @@ class SimulatedPrinter:
         )
 
     def _do_statistics(self, args: list[str]) -> tuple[int, str]:
-        return int(Status.OK), "NAME=PRINTS,VALUE=%d;NAME=HOURS,VALUE=%d" % (self.printed, 812)
+        counters = {
+            "PRINTS": self.printed,
+            "HOURS": self.powered_hours,
+            "PRINTHOURS": max(self.powered_hours // 3, 0),
+            "PURGES": self.purges,
+            "FAULTS": self.faults,
+            "STARTS": self.starts,
+        }
+        return int(Status.OK), ";".join(
+            "NAME=%s,VALUE=%d" % (name, value) for name, value in counters.items()
+        )
 
     # Print control
 
@@ -193,6 +208,7 @@ class SimulatedPrinter:
         if self.state is MachineState.FAULT:
             return int(Status.HEAD_FAULT), ""
         self.state = MachineState.PRINTING
+        self.starts += 1
         return int(Status.OK), ""
 
     def _do_stopprint(self, args: list[str]) -> tuple[int, str]:
