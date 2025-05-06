@@ -19,7 +19,7 @@ from pathlib import Path
 import typer
 
 from nozzlewright.cli.context import Context
-from nozzlewright.cli.output import emit
+from nozzlewright.cli.output import emit, fail
 from nozzlewright.errors import NozzlewrightError
 from nozzlewright.fleet.export import write_alarms, write_jobs, write_samples
 from nozzlewright.fleet.report import build_report
@@ -183,7 +183,7 @@ def fleet_export(
     writers = {"samples": write_samples, "runs": write_jobs, "alarms": write_alarms}
     writer = writers.get(what.strip().lower())
     if writer is None:
-        raise NozzlewrightError("%r is not one of %s" % (what, ", ".join(sorted(writers))))
+        raise fail("%r is not one of %s" % (what, ", ".join(sorted(writers))))
 
     handle = sys.stdout
     opened = None

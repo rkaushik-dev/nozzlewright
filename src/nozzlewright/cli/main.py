@@ -25,6 +25,7 @@ from nozzlewright.cli.fleet_commands import fleet_app
 from nozzlewright.cli.label_commands import label_app
 from nozzlewright.cli.output import emit
 from nozzlewright.cli.printer_commands import printer_app
+from nozzlewright.cli.profile_commands import profile_app
 from nozzlewright.cli.serve_commands import db_app, serve_app
 from nozzlewright.errors import NozzlewrightError
 from nozzlewright.fleet.registry import PrinterRecord
@@ -43,6 +44,7 @@ app.add_typer(label_app, name="label")
 app.add_typer(serve_app, name="serve")
 app.add_typer(db_app, name="db")
 app.add_typer(fleet_app, name="fleet")
+app.add_typer(profile_app, name="profile")
 
 
 def _context(ctx: typer.Context) -> Context:

@@ -13,7 +13,7 @@ from typing import Any
 
 import typer
 
-__all__ = ["emit", "render_row"]
+__all__ = ["emit", "fail", "render_row"]
 
 
 def render_row(row: Any) -> str:
@@ -44,3 +44,14 @@ def emit(payload: Any, as_json: bool = False) -> None:
             typer.echo(render_row(row))
         return
     typer.echo(render_row(payload))
+
+
+def fail(message: str) -> typer.Exit:
+    """Print a refusal and stop the command.
+
+    Returned rather than raised so the call site reads ``raise fail(...)`` and
+    a reader can see that the function ends there. Typer prints a traceback for
+    anything that escapes a command, which is noise a technician cannot act on.
+    """
+    typer.secho(message, fg=typer.colors.RED, err=True)
+    return typer.Exit(code=1)
