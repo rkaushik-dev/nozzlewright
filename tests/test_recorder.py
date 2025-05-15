@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from nozzlewright.fleet.poller import PollResult
 from nozzlewright.fleet.registry import PrinterRecord
-from nozzlewright.printer.status import Alarm, MachineState, PrinterStatus
+from nozzlewright.printer.status import Alarm, MachineState, PrinterStatus, Severity
 from nozzlewright.storage.engine import build_engine, build_sessionmaker, create_all
 from nozzlewright.storage.recorder import Recorder
 from nozzlewright.storage.repo import AlarmRepo, PrinterRepo, SampleRepo
@@ -182,3 +182,67 @@ def test_a_write_failure_is_counted_not_raised(factory: sessionmaker[Session]) -
     assert not recorder.record(reading(), at=WHEN)
     assert recorder.stats.write_failures == 1
     engine.dispose()
+
+
+def test_a_reading_reports_the_alarms_it_shows(factory: sessionmaker[Session]) -> None:
+    recorder = Recorder(factory=factory)
+    outcome = recorder.record(reading(alarms=Alarm.INK_LOW), at=WHEN)
+    assert outcome.written
+    assert [(change.name, change.open_now) for change in outcome.changes] == [("INK_LOW", True)]
+    assert outcome.changes[0].severity is Severity.WARNING
+
+
+def test_an_alarm_still_up_is_reported_again(factory: sessionmaker[Session]) -> None:
+    recorder = Recorder(factory=factory)
+    recorder.record(reading(alarms=Alarm.INK_LOW), at=WHEN)
+    again = recorder.record(reading(alarms=Alarm.INK_LOW), at=WHEN + timedelta(seconds=15))
+    assert len(again.changes) == 1
+    assert again.changes[0].open_now
+
+
+def test_an_alarm_going_away_is_reported(factory: sessionmaker[Session]) -> None:
+    recorder = Recorder(factory=factory)
+    recorder.record(reading(alarms=Alarm.INK_LOW), at=WHEN)
+    gone = recorder.record(reading(), at=WHEN + timedelta(seconds=15))
+    assert [(change.name, change.open_now) for change in gone.changes] == [("INK_LOW", False)]
+    assert gone.changes[0].severity is Severity.WARNING
+
+
+def test_a_quiet_reading_reports_nothing(factory: sessionmaker[Session]) -> None:
+    recorder = Recorder(factory=factory)
+    assert recorder.record(reading(), at=WHEN).changes == ()
+
+
+def test_an_acknowledged_alarm_says_so(factory: sessionmaker[Session]) -> None:
+    recorder = Recorder(factory=factory)
+    recorder.record(reading(alarms=Alarm.INK_LOW), at=WHEN)
+    with factory() as session:
+        printer = PrinterRepo(session).get("line4")
+        assert printer is not None
+        AlarmRepo(session).acknowledge(printer, "INK_LOW", "mueller")
+        session.commit()
+    again = recorder.record(reading(alarms=Alarm.INK_LOW), at=WHEN + timedelta(seconds=15))
+    assert again.changes[0].acknowledged
+
+
+def test_an_unknown_machine_reports_nothing(factory: sessionmaker[Session]) -> None:
+    recorder = Recorder(factory=factory)
+    ghost = PollResult(printer_id="line9", at=0.0, duration_s=0.05)
+    outcome = recorder.record(ghost, at=WHEN)
+    assert not outcome
+    assert outcome.changes == ()
+
+
+def test_a_stored_severity_nobody_recognises_reads_as_a_warning(
+    factory: sessionmaker[Session],
+) -> None:
+    recorder = Recorder(factory=factory)
+    recorder.record(reading(alarms=Alarm.INK_LOW), at=WHEN)
+    with factory() as session:
+        printer = PrinterRepo(session).get("line4")
+        assert printer is not None
+        row = AlarmRepo(session).active("line4")[0]
+        row.severity = "catastrophic"
+        session.commit()
+    gone = recorder.record(reading(), at=WHEN + timedelta(seconds=15))
+    assert gone.changes[0].severity is Severity.WARNING

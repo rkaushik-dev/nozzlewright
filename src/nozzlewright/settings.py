@@ -18,7 +18,13 @@ from typing import Literal
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-__all__ = ["LinkSettings", "SessionSettings", "Settings", "load_settings"]
+__all__ = [
+    "LinkSettings",
+    "NotifySettings",
+    "SessionSettings",
+    "Settings",
+    "load_settings",
+]
 
 TransportKind = Literal["tcp", "rfcomm", "loopback"]
 
@@ -75,6 +81,35 @@ class SessionSettings(BaseSettings):
     retries: int = Field(default=2, ge=0, le=10)
 
 
+class NotifySettings(BaseSettings):
+    """Where alarm notices go, if anywhere.
+
+    Off by default. A gateway that starts posting to a webhook nobody
+    configured is a gateway that fills somebody else logs, so the URL being
+    empty is the switch.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="NZW_NOTIFY_", extra="ignore")
+
+    #: Post notices here. Empty means the log is the only sink.
+    webhook_url: str = ""
+
+    #: Sent as a bearer token when it is set.
+    webhook_token: str = ""
+
+    #: How long to wait on the webhook before giving up on one notice.
+    webhook_timeout_s: float = Field(default=3.0, gt=0.0, le=30.0)
+
+    #: Nothing below this severity leaves the gateway.
+    floor: Literal["info", "warning", "stop"] = "warning"
+
+    #: The same alarm on the same machine stays quiet this long after a notice.
+    quiet_minutes: float = Field(default=5.0, ge=0.0, le=1440.0)
+
+    #: An unacknowledged stop is repeated after this long.
+    reminder_minutes: float = Field(default=20.0, ge=1.0, le=1440.0)
+
+
 class Settings(BaseSettings):
     """Top level settings object, assembled once at start up."""
 
@@ -87,6 +122,7 @@ class Settings(BaseSettings):
 
     link: LinkSettings = Field(default_factory=LinkSettings)
     session: SessionSettings = Field(default_factory=SessionSettings)
+    notify: NotifySettings = Field(default_factory=NotifySettings)
 
     @field_validator("log_level")
     @classmethod

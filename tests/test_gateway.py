@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 from pathlib import Path
 
 import httpx
 import pytest
 from sqlalchemy import inspect
 
+from nozzlewright.fleet.poller import PollResult
 from nozzlewright.fleet.registry import PrinterRecord, Registry
 from nozzlewright.gateway import Gateway
+from nozzlewright.printer.status import Alarm, MachineState, PrinterStatus, Severity
 from nozzlewright.session.auth import Credentials
-from nozzlewright.settings import LinkSettings, SessionSettings, Settings
+from nozzlewright.settings import LinkSettings, NotifySettings, SessionSettings, Settings
 from nozzlewright.storage.repo import PrinterRepo, SampleRepo
 
 FAST = Settings(
@@ -195,3 +198,111 @@ async def test_a_site_of_several_machines(tmp_path: Path, count: int) -> None:
     for printer_id in ids:
         assert await gateway.poller.session(printer_id).wait_ready(3.0)
     await gateway.stop()
+
+
+def notify_settings(**kwargs: object) -> Settings:
+    return Settings(
+        site_id="bench",
+        link=FAST.link,
+        session=FAST.session,
+        notify=NotifySettings(**kwargs),  # type: ignore[arg-type]
+    )
+
+
+def test_the_log_sink_is_always_there(tmp_path: Path) -> None:
+    gateway = build(site(tmp_path, "line4"))
+    gateway.prepare()
+    assert gateway.notifier is not None
+    assert [sink.name for sink in gateway.notifier.sinks] == ["log"]
+    gateway._dispose()
+
+
+def test_a_webhook_url_adds_a_sink(tmp_path: Path) -> None:
+    gateway = build(site(tmp_path, "line4"), settings=notify_settings(webhook_url="http://ops/h"))
+    gateway.prepare()
+    assert gateway.notifier is not None
+    assert [sink.name for sink in gateway.notifier.sinks] == ["log", "webhook"]
+    gateway._dispose()
+
+
+def test_the_notify_floor_comes_from_settings(tmp_path: Path) -> None:
+    gateway = build(site(tmp_path, "line4"), settings=notify_settings(floor="stop"))
+    gateway.prepare()
+    assert gateway.notifier is not None
+    assert gateway.notifier.floor is Severity.STOP
+    assert gateway.notifier.reminder == timedelta(minutes=20)
+    gateway._dispose()
+
+
+async def test_an_alarm_reaches_the_notifier(tmp_path: Path) -> None:
+    gateway = build(site(tmp_path, "line4"))
+    gateway.prepare()
+    assert gateway.notifier is not None
+    seen: list[object] = []
+    gateway.notifier.sinks = [_Catcher(seen)]
+    await gateway._record(
+        PollResult(
+            printer_id="line4",
+            at=0.0,
+            duration_s=0.05,
+            status=PrinterStatus(state=MachineState.FAULT, alarms=Alarm.INK_OUT),
+        )
+    )
+    assert len(seen) == 1
+    assert seen[0].alarm == "INK_OUT"  # type: ignore[attr-defined]
+    assert seen[0].line == "4"  # type: ignore[attr-defined]
+    gateway._dispose()
+
+
+async def test_a_clean_reading_says_nothing(tmp_path: Path) -> None:
+    gateway = build(site(tmp_path, "line4"))
+    gateway.prepare()
+    assert gateway.notifier is not None
+    seen: list[object] = []
+    gateway.notifier.sinks = [_Catcher(seen)]
+    await gateway._record(
+        PollResult(
+            printer_id="line4",
+            at=0.0,
+            duration_s=0.05,
+            status=PrinterStatus(state=MachineState.PRINTING, alarms=Alarm.NONE),
+        )
+    )
+    assert seen == []
+    gateway._dispose()
+
+
+async def test_a_reading_for_a_machine_that_left_still_notifies(tmp_path: Path) -> None:
+    gateway = build(site(tmp_path, "line4"))
+    gateway.prepare()
+    assert gateway.notifier is not None
+    seen: list[object] = []
+    gateway.notifier.sinks = [_Catcher(seen)]
+    del gateway.registry.records["line4"]
+    await gateway._record(PollResult(printer_id="line4", at=0.0, duration_s=2.0, error="no answer"))
+    assert len(seen) == 1
+    assert seen[0].alarm == "UNREACHABLE"  # type: ignore[attr-defined]
+    assert seen[0].line == ""  # type: ignore[attr-defined]
+    gateway._dispose()
+
+
+async def test_stopping_closes_the_webhook_client(tmp_path: Path) -> None:
+    gateway = build(site(tmp_path, "line4"), settings=notify_settings(webhook_url="http://ops/h"))
+    await gateway.start()
+    client = gateway._webhook_client
+    assert client is not None
+    await gateway.stop()
+    assert gateway._webhook_client is None
+    assert client.is_closed
+
+
+class _Catcher:
+    """A sink that keeps the notices the gateway hands it."""
+
+    name = "catcher"
+
+    def __init__(self, seen: list[object]) -> None:
+        self.seen = seen
+
+    async def deliver(self, notice: object) -> None:
+        self.seen.append(notice)

@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -31,9 +32,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from nozzlewright.api.app import build_app
 from nozzlewright.api.deps import Services
 from nozzlewright.cli.context import build_transport
+from nozzlewright.fleet.notify import LogSink, Notifier, Sink, WebhookSink
 from nozzlewright.fleet.poller import FleetPoller, PollResult
 from nozzlewright.fleet.registry import PrinterRecord, Registry
 from nozzlewright.fleet.stats import StatsCollector
+from nozzlewright.printer.status import Severity
 from nozzlewright.session.auth import Credentials
 from nozzlewright.session.supervisor import PrinterSession
 from nozzlewright.settings import Settings, load_settings
@@ -50,6 +53,10 @@ _log = get_logger("nozzlewright.gateway")
 
 DATABASE_NAME = "site.sqlite3"
 REGISTRY_NAME = "registry.json"
+
+#: Stand in for a machine that has left the registry mid poll, so a notice can
+#: still go out about the alarm that was already up on it.
+_NO_RECORD = PrinterRecord(printer_id="gone", endpoint="0.0.0.0:0")
 
 
 @dataclass
@@ -69,7 +76,9 @@ class Gateway:
     registry: Registry = field(default_factory=Registry, init=False)
     poller: FleetPoller | None = field(default=None, init=False)
     recorder: Recorder | None = field(default=None, init=False)
+    notifier: Notifier | None = field(default=None, init=False)
     metrics: Metrics | None = field(default=None, init=False)
+    _webhook_client: httpx.AsyncClient | None = field(default=None, init=False, repr=False)
     stats: StatsCollector = field(default_factory=StatsCollector, init=False)
     services: Services | None = field(default=None, init=False)
     app: FastAPI | None = field(default=None, init=False)
@@ -112,6 +121,7 @@ class Gateway:
 
         self.metrics = Metrics(site_id=self.settings.site_id)
         self.recorder = Recorder(factory=self.factory, retention=self.retention)
+        self.notifier = self._build_notifier()
         self.services = Services(
             settings=self.settings,
             factory=self.factory,
@@ -157,6 +167,9 @@ class Gateway:
             self.poller = None
         if self.services is not None:
             self.services.poller = None
+        if self._webhook_client is not None:
+            await self._webhook_client.aclose()
+            self._webhook_client = None
         self._dispose()
         _log.info("gateway stopped")
 
@@ -171,8 +184,49 @@ class Gateway:
         self.stats.observe(result)
         if self.metrics is not None:
             self.metrics.observe(result)
-        if self.recorder is not None:
-            self.recorder.record(result)
+        if self.recorder is None:
+            return
+        outcome = self.recorder.record(result)
+        if self.notifier is None or not outcome.changes:
+            return
+        line = self.registry.records.get(result.printer_id, _NO_RECORD).line
+        for change in outcome.changes:
+            await self.notifier.announce(
+                change.printer_id,
+                change.name,
+                change.severity,
+                open_now=change.open_now,
+                acknowledged=change.acknowledged,
+                line=line,
+            )
+
+    def _build_notifier(self) -> Notifier:
+        """Assemble the sinks this gateway was configured with.
+
+        The log sink is always there. A gateway with no webhook still leaves a
+        trail of what went up and when, which is the thing a shift handover
+        needs and the thing a chat room is worst at keeping.
+        """
+        wanted = self.settings.notify
+        sinks: list[Sink] = [LogSink()]
+        if wanted.webhook_url:
+            self._webhook_client = httpx.AsyncClient(timeout=wanted.webhook_timeout_s)
+            sinks.append(
+                WebhookSink(
+                    url=wanted.webhook_url,
+                    client=self._webhook_client,
+                    token=wanted.webhook_token,
+                    timeout_s=wanted.webhook_timeout_s,
+                )
+            )
+            _log.info("alarm webhook configured", url=wanted.webhook_url)
+        return Notifier(
+            site_id=self.settings.site_id,
+            sinks=sinks,
+            floor=Severity(wanted.floor),
+            quiet=timedelta(minutes=wanted.quiet_minutes),
+            reminder=timedelta(minutes=wanted.reminder_minutes),
+        )
 
     def _session_for(self, record: PrinterRecord) -> PrinterSession:
         """A supervised session for one registry record."""
