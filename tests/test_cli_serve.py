@@ -67,7 +67,14 @@ def test_db_upgrade_is_idempotent(tmp_path: Path) -> None:
 
 def test_db_prune_on_an_empty_database(tmp_path: Path) -> None:
     result = invoke(site(tmp_path), "db", "prune")
-    assert "removed 0 readings" in result.stdout
+    assert "samples=0" in result.stdout
+    assert "failed=0" in result.stdout
+
+
+def test_db_prune_reports_the_file_size(tmp_path: Path) -> None:
+    body = json.loads(invoke(site(tmp_path), "db", "prune", "--json").stdout)
+    assert body["bytes"] > 0
+    assert body["vacuumed"] == 1
 
 
 def test_building_a_gateway_from_the_context(tmp_path: Path) -> None:
@@ -78,7 +85,7 @@ def test_building_a_gateway_from_the_context(tmp_path: Path) -> None:
         api_keys="alpha, beta ,",
     )
     assert gateway.poll_interval_s == 0.05
-    assert gateway.retention.days == 3
+    assert gateway.retention.samples.days == 3
     assert gateway.api_keys == frozenset({"alpha", "beta"})
     assert gateway.credentials is not None
     assert gateway.simulate

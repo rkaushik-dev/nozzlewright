@@ -153,16 +153,6 @@ def test_alarms_survive_a_restart(factory: sessionmaker[Session]) -> None:
         assert rows[0].raised_at == WHEN
 
 
-def test_prune_drops_old_readings(factory: sessionmaker[Session]) -> None:
-    recorder = Recorder(factory=factory, retention=timedelta(days=1))
-    recorder.record(reading(), at=WHEN - timedelta(days=3))
-    recorder.record(reading(), at=WHEN)
-    assert recorder.prune(now=WHEN) == 1
-    assert recorder.stats.pruned == 1
-    with factory() as session:
-        assert SampleRepo(session).count() == 1
-
-
 def test_stats_snapshot_has_every_counter(factory: sessionmaker[Session]) -> None:
     recorder = Recorder(factory=factory)
     recorder.record(reading(), at=WHEN)
@@ -171,7 +161,6 @@ def test_stats_snapshot_has_every_counter(factory: sessionmaker[Session]) -> Non
         "alarms_opened",
         "alarms_closed",
         "write_failures",
-        "pruned",
     }
 
 

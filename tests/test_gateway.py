@@ -164,15 +164,24 @@ async def test_a_disabled_machine_is_not_polled(tmp_path: Path) -> None:
     await gateway.stop()
 
 
-async def test_prune_runs(tmp_path: Path) -> None:
+async def test_a_sweep_runs(tmp_path: Path) -> None:
     gateway = build(site(tmp_path, "line4"))
     gateway.prepare()
-    assert gateway.prune() == 0
+    assert gateway.sweep().rows == 0
     gateway._dispose()
 
 
-def test_prune_before_prepare_is_zero(tmp_path: Path) -> None:
-    assert build(tmp_path).prune() == 0
+def test_a_sweep_before_prepare_does_nothing(tmp_path: Path) -> None:
+    assert build(tmp_path).sweep().rows == 0
+
+
+async def test_the_janitor_runs_while_the_gateway_does(tmp_path: Path) -> None:
+    gateway = build(site(tmp_path, "line4"))
+    await gateway.start()
+    assert gateway.janitor is not None
+    assert gateway.janitor.running
+    await gateway.stop()
+    assert not gateway.janitor.running
 
 
 def test_the_database_url_sits_in_the_state_directory(tmp_path: Path) -> None:

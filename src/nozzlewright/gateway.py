@@ -41,6 +41,7 @@ from nozzlewright.session.auth import Credentials
 from nozzlewright.session.supervisor import PrinterSession
 from nozzlewright.settings import Settings, load_settings
 from nozzlewright.storage.engine import build_engine, build_sessionmaker, session_scope
+from nozzlewright.storage.janitor import Janitor, Retention, SweepResult
 from nozzlewright.storage.recorder import Recorder
 from nozzlewright.storage.repo import PrinterRepo
 from nozzlewright.storage.schema import upgrade
@@ -66,7 +67,7 @@ class Gateway:
     settings: Settings = field(default_factory=load_settings)
     state_dir: Path | None = None
     poll_interval_s: float = 15.0
-    retention: timedelta = timedelta(days=14)
+    retention: Retention = field(default_factory=Retention)
     api_keys: frozenset[str] = frozenset()
     credentials: Credentials | None = None
     simulate: bool = False
@@ -76,6 +77,7 @@ class Gateway:
     registry: Registry = field(default_factory=Registry, init=False)
     poller: FleetPoller | None = field(default=None, init=False)
     recorder: Recorder | None = field(default=None, init=False)
+    janitor: Janitor | None = field(default=None, init=False)
     notifier: Notifier | None = field(default=None, init=False)
     metrics: Metrics | None = field(default=None, init=False)
     _webhook_client: httpx.AsyncClient | None = field(default=None, init=False, repr=False)
@@ -120,7 +122,8 @@ class Gateway:
         self._sync_registry()
 
         self.metrics = Metrics(site_id=self.settings.site_id)
-        self.recorder = Recorder(factory=self.factory, retention=self.retention)
+        self.recorder = Recorder(factory=self.factory)
+        self.janitor = Janitor(factory=self.factory, engine=self.engine, retention=self.retention)
         self.notifier = self._build_notifier()
         self.services = Services(
             settings=self.settings,
@@ -153,6 +156,8 @@ class Gateway:
         )
         await self.poller.start()
         self.services.poller = self.poller
+        if self.janitor is not None:
+            await self.janitor.start()
         self.running = True
         _log.info("gateway started", machines=len(self.registry.enabled()))
 
@@ -162,6 +167,8 @@ class Gateway:
             self._dispose()
             return
         self.running = False
+        if self.janitor is not None:
+            await self.janitor.stop()
         if self.poller is not None:
             await self.poller.stop()
             self.poller = None
@@ -173,11 +180,11 @@ class Gateway:
         self._dispose()
         _log.info("gateway stopped")
 
-    def prune(self) -> int:
-        """Drop readings past the retention window."""
-        if self.recorder is None:
-            return 0
-        return self.recorder.prune()
+    def sweep(self) -> SweepResult:
+        """Delete everything past its retention, once, right now."""
+        if self.janitor is None:
+            return SweepResult()
+        return self.janitor.sweep()
 
     async def _record(self, result: PollResult) -> None:
         """Everything that wants to know about one reading."""

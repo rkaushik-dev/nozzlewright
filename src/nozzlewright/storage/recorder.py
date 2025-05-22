@@ -16,12 +16,17 @@ tells them is asynchronous while this is not, so the alarm state each reading
 implies comes back out of :meth:`Recorder.record` as a list rather than being
 delivered here. The caller decides what to do with it. That keeps the storage
 package free of any opinion about pagers, chat rooms or webhooks.
+
+Deleting is not here either. It used to be, as a prune method that dropped old
+samples, and that was the wrong place twice over. It only knew about one table,
+and it hung a scheduled job off the object whose whole job is one reading at a
+time. The janitor owns retention now.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
@@ -38,9 +43,6 @@ __all__ = ["AlarmChange", "RecordOutcome", "Recorder", "RecorderStats"]
 
 _log = get_logger("nozzlewright.recorder")
 
-#: Default retention for poll samples on a gateway.
-DEFAULT_RETENTION = timedelta(days=14)
-
 
 @dataclass
 class RecorderStats:
@@ -50,7 +52,6 @@ class RecorderStats:
     alarms_opened: int = 0
     alarms_closed: int = 0
     write_failures: int = 0
-    pruned: int = 0
 
     def as_dict(self) -> dict[str, int]:
         """A plain mapping for the metrics endpoint."""
@@ -59,7 +60,6 @@ class RecorderStats:
             "alarms_opened": self.alarms_opened,
             "alarms_closed": self.alarms_closed,
             "write_failures": self.write_failures,
-            "pruned": self.pruned,
         }
 
 
@@ -98,7 +98,6 @@ class Recorder:
     """Folds poll results into the database."""
 
     factory: sessionmaker[Session]
-    retention: timedelta = DEFAULT_RETENTION
     stats: RecorderStats = field(default_factory=RecorderStats)
 
     async def __call__(self, result: PollResult) -> None:
@@ -124,20 +123,6 @@ class Recorder:
             return RecordOutcome(False)
         self.stats.samples += 1
         return RecordOutcome(True, tuple(changes))
-
-    def prune(self, now: datetime | None = None) -> int:
-        """Drop readings past the retention window."""
-        try:
-            with session_scope(self.factory) as session:
-                removed = SampleRepo(session).prune(self.retention, now=now)
-        except SQLAlchemyError as error:
-            self.stats.write_failures += 1
-            _log.warning("could not prune", error=str(error))
-            return 0
-        self.stats.pruned += removed
-        if removed:
-            _log.info("pruned old readings", rows=removed)
-        return removed
 
     def _fold_alarms(
         self, session: Session, printer: Printer, result: PollResult, moment: datetime

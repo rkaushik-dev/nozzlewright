@@ -20,10 +20,11 @@ import typer
 from fastapi import FastAPI, Response
 
 from nozzlewright.cli.context import Context
-from nozzlewright.cli.output import emit
+from nozzlewright.cli.output import emit, fail
 from nozzlewright.gateway import Gateway
 from nozzlewright.session.auth import Credentials
 from nozzlewright.storage.engine import build_engine
+from nozzlewright.storage.janitor import Retention
 from nozzlewright.storage.schema import current_revision, head_revision, upgrade
 from nozzlewright.telemetry.logging import get_logger
 from nozzlewright.telemetry.metrics import CONTENT_TYPE
@@ -56,7 +57,7 @@ def build_gateway(
         settings=context.settings,
         state_dir=context.state_dir,
         poll_interval_s=poll_interval_s,
-        retention=timedelta(days=retention_days),
+        retention=Retention(samples=timedelta(days=retention_days)),
         api_keys=keys,
         credentials=credentials,
         simulate=context.simulate,
@@ -155,15 +156,19 @@ def db_status(
 def db_prune(
     ctx: typer.Context,
     retention_days: int = typer.Option(14, help="How long readings are kept."),
+    as_json: bool = typer.Option(False, "--json", help="Machine readable output."),
 ) -> None:
-    """Delete readings past the retention window."""
+    """Delete everything past its retention, once."""
     context = _context(ctx)
     gateway = build_gateway(
         context, poll_interval_s=15.0, retention_days=retention_days, api_keys=""
     )
     gateway.prepare()
     try:
-        removed = gateway.prune()
+        result = gateway.sweep()
+        pages = gateway.janitor.page_stats() if gateway.janitor is not None else {}
     finally:
         asyncio.run(gateway.stop())
-    typer.echo("removed %d readings" % removed)
+    if result.failed:
+        raise fail("the sweep did not finish, see the log")
+    emit({**result.as_dict(), "bytes": pages.get("bytes", 0)}, as_json)
