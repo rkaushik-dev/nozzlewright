@@ -388,6 +388,35 @@ _CARTRIDGE: tuple[CommandSpec, ...] = (
     _spec("NEEDDATA", LEVEL_FACTORY, ReplyShape.SCALAR),
 )
 
+_MAINTENANCE: tuple[CommandSpec, ...] = (
+    _spec(
+        "NOZTEST",
+        LEVEL_SUPERVISOR,
+        ReplyShape.TABLE,
+        ArgSpec("pen", ArgKind.INT, low=0, high=8),
+        families=("HVX4PEN", "HVX8PEN"),
+        while_printing=False,
+    ),
+    _spec(
+        "PURGE",
+        LEVEL_SUPERVISOR,
+        ReplyShape.SCALAR,
+        ArgSpec("pen", ArgKind.INT, low=0, high=8),
+        ArgSpec("drops", ArgKind.INT, low=1, high=2000),
+        families=("HVX4PEN", "HVX8PEN"),
+        while_printing=False,
+    ),
+    _spec(
+        "WIPE",
+        LEVEL_ENGINEER,
+        ReplyShape.SCALAR,
+        ArgSpec("pen", ArgKind.INT, low=0, high=8),
+        families=("HVX4PEN", "HVX8PEN"),
+        min_revision=2,
+        while_printing=False,
+    ),
+)
+
 _NETWORK: tuple[CommandSpec, ...] = (
     _spec("WIFISCAN", LEVEL_SUPERVISOR, ReplyShape.EMPTY, while_printing=False),
     _spec("WIFILIST", LEVEL_SUPERVISOR, ReplyShape.TABLE),
@@ -427,6 +456,7 @@ CATALOGUE: dict[str, CommandSpec] = {
         *_FIRING,
         *_ENCODER,
         *_CARTRIDGE,
+        *_MAINTENANCE,
         *_NETWORK,
     )
 }

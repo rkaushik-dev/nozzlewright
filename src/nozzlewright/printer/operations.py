@@ -18,12 +18,21 @@ from dataclasses import dataclass
 from nozzlewright.errors import CommandRejected, ConfigError, PrinterBusy
 from nozzlewright.printer.config import ConfigDiff, PrinterConfig
 from nozzlewright.printer.ink import InkReading, parse_ink_rows
+from nozzlewright.printer.nozzles import Advice, HeadHealth, parse_nozzle_test
 from nozzlewright.printer.snapshot import parse_config_table
 from nozzlewright.printer.status import MachineState, PrinterStatus, parse_status
 from nozzlewright.session.supervisor import PrinterSession
 from nozzlewright.telemetry.logging import get_logger
 
-__all__ = ["ApplyReport", "apply_config", "read_config", "read_ink", "read_status"]
+__all__ = [
+    "ApplyReport",
+    "apply_config",
+    "read_config",
+    "read_ink",
+    "read_nozzles",
+    "read_status",
+    "recover_head",
+]
 
 _log = get_logger("nozzlewright.operations")
 
@@ -83,6 +92,55 @@ async def read_ink(session: PrinterSession) -> tuple[InkReading, ...]:
     verb = "INK2" if dialect is not None and dialect.supports("INK2") else "INK"
     response = await session.command(verb)
     return parse_ink_rows(response.table())
+
+
+async def read_nozzles(session: PrinterSession, pen: int = 0) -> HeadHealth:
+    """Run a nozzle test and decode it.
+
+    Pen zero means every cartridge, which is what the firmware does with it and
+    what an operator standing at the machine means by the word test.
+    """
+    dialect = session.dialect
+    if dialect is not None and not dialect.supports("NOZTEST"):
+        raise ConfigError("session", session.printer_id, "this machine has no nozzle test")
+    response = await session.command("NOZTEST", pen)
+    return parse_nozzle_test(response.table())
+
+
+async def recover_head(
+    session: PrinterSession,
+    *,
+    pen: int = 0,
+    drops: int = 200,
+    retest: bool = True,
+) -> tuple[HeadHealth, HeadHealth | None]:
+    """Do whatever the nozzle test says the head needs, then look again.
+
+    Returns the reading it started from and the reading after, so the caller can
+    say whether the purge actually helped. A cartridge past saving is not
+    purged at all: spitting two hundred drops through a dead row wastes ink and
+    stains the deflector for nothing, and the answer is a new cartridge.
+    """
+    before = await read_nozzles(session, pen)
+    advice = before.advice
+    if advice is Advice.NONE or advice is Advice.REPLACE:
+        return before, None
+
+    target = before.worst_pen if pen == 0 else pen
+    await session.command("PURGE", target, drops)
+    dialect = session.dialect
+    if advice is Advice.CLEAN and (dialect is None or dialect.supports("WIPE")):
+        await session.command("WIPE", target)
+    _log.info(
+        "head recovery run",
+        printer=session.printer_id,
+        pen=target,
+        advice=advice.value,
+        drops=drops,
+    )
+    if not retest:
+        return before, None
+    return before, await read_nozzles(session, pen)
 
 
 async def apply_config(

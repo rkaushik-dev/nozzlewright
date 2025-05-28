@@ -20,6 +20,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from nozzlewright.printer.config import PrinterConfig
+from nozzlewright.printer.geometry import NOZZLES_PER_ROW
 from nozzlewright.printer.snapshot import render_config_table
 from nozzlewright.printer.status import Alarm, MachineState
 from nozzlewright.protocol.catalogue import CommandSpec, lookup
@@ -67,8 +68,13 @@ class SimulatedPrinter:
     #: The machine's own life counters, which never reset on their own.
     powered_hours: int = 812
     purges: int = 14
+    wipes: int = 3
     faults: int = 2
     starts: int = 0
+    #: Nozzles not firing, keyed by pen and row. A purge clears these.
+    blocked_nozzles: dict[tuple[int, int], tuple[int, ...]] = field(default_factory=dict)
+    #: Nozzles whose resistor has gone. Nothing brings these back.
+    burnt_nozzles: dict[tuple[int, int], tuple[int, ...]] = field(default_factory=dict)
 
     # Bookkeeping the tests read.
     seen: list[str] = field(default_factory=list)
@@ -280,5 +286,74 @@ class SimulatedPrinter:
         pens = 1 if self.config is None else self.config.head.pen_count
         return [(pen, max(100 - pen * 7, 0)) for pen in range(1, pens + 1)]
 
+    def _do_noztest(self, args: list[str]) -> tuple[int, str]:
+        """Answer with a row word per pen, with the blocked nozzles cleared."""
+        if len(args) != 1:
+            return int(Status.BAD_PARAM), ""
+        try:
+            wanted = int(args[0])
+        except ValueError:
+            return int(Status.BAD_PARAM), ""
+        pens = 1 if self.config is None else self.config.head.pen_count
+        if wanted and wanted > pens:
+            return int(Status.NOT_FOUND), ""
+        rows = []
+        for pen in range(1, pens + 1):
+            if wanted and pen != wanted:
+                continue
+            for row in range(self._rows_on(pen)):
+                blocked = self.blocked_nozzles.get((pen, row), ())
+                rows.append("PEN=%d,ROW=%d,BITS=%016X" % (pen, row, _row_word(blocked)))
+        return int(Status.OK), ";".join(rows)
+
+    def _do_purge(self, args: list[str]) -> tuple[int, str]:
+        """Spit ink through the nozzles, which frees the ones that are close.
+
+        A purge shifts dried ink and nothing else. A nozzle whose resistor has
+        gone open circuit answers a purge exactly the way it answers everything,
+        which is why the simulator keeps two sets and only clears one of them.
+        """
+        if len(args) != 2:
+            return int(Status.BAD_PARAM), ""
+        try:
+            pen, drops = int(args[0]), int(args[1])
+        except ValueError:
+            return int(Status.BAD_PARAM), ""
+        self.purges += 1
+        freed = 0
+        for (owner, row), blocked in list(self.blocked_nozzles.items()):
+            if pen and owner != pen:
+                continue
+            burnt = self.burnt_nozzles.get((owner, row), ())
+            surviving = tuple(nozzle for nozzle in blocked if nozzle in burnt)
+            freed += len(blocked) - len(surviving)
+            self.blocked_nozzles[(owner, row)] = surviving
+        return int(Status.OK), "FREED=%d,DROPS=%d" % (freed, drops)
+
+    def _do_wipe(self, args: list[str]) -> tuple[int, str]:
+        """Run the wiper over the plate. Counts, and frees nothing on its own."""
+        if len(args) != 1:
+            return int(Status.BAD_PARAM), ""
+        self.wipes += 1
+        return int(Status.OK), "OK"
+
+    def _rows_on(self, pen: int) -> int:
+        """How many nozzle rows a cartridge has."""
+        if self.config is None:
+            return 2
+        for group in self.config.head.groups:
+            for geometry in group.pens:
+                if geometry.index == pen:
+                    return geometry.rows
+        return 2
+
     def _do_minmax(self, args: list[str]) -> tuple[int, str]:
         return int(Status.OK), ("NAME=HORZRES,MIN=75,MAX=600;NAME=FIRINGVOL,MIN=6000,MAX=14000")
+
+
+def _row_word(blocked: tuple[int, ...]) -> int:
+    """A nozzle row word with the blocked nozzles cleared."""
+    word = (1 << NOZZLES_PER_ROW) - 1
+    for nozzle in blocked:
+        word &= ~(1 << nozzle)
+    return word
