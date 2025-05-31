@@ -8,7 +8,7 @@ forty commands on the wire.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from nozzlewright.api.deps import (
@@ -23,12 +23,21 @@ from nozzlewright.api.schemas import (
     ApplyOut,
     ConfigOut,
     InkOut,
+    NozzleOut,
     PrinterIn,
     PrinterOut,
+    RecoveryOut,
     StatusOut,
 )
 from nozzlewright.fleet.registry import PrinterRecord
-from nozzlewright.printer.operations import apply_config, read_config, read_ink, read_status
+from nozzlewright.printer.operations import (
+    apply_config,
+    read_config,
+    read_ink,
+    read_nozzles,
+    read_status,
+    recover_head,
+)
 from nozzlewright.printer.snapshot import parse_config_table, render_config_table
 from nozzlewright.protocol.codec import parse_table
 from nozzlewright.session.supervisor import PrinterSession
@@ -133,6 +142,50 @@ async def printer_ink(
 ) -> list[InkOut]:
     """Ink levels, always read live because they move."""
     return [InkOut.from_domain(level) for level in await read_ink(session_for)]
+
+
+@router.get("/{printer_id}/nozzles", response_model=NozzleOut)
+async def printer_nozzles(
+    printer_id: str,
+    pen: int = Query(default=0, ge=0, le=8, description="One cartridge, or nought for all."),
+    session_for: PrinterSession = Depends(get_printer_session),
+) -> NozzleOut:
+    """Run a nozzle test on the machine and decode it.
+
+    A test stops the print for as long as it takes to fire every nozzle once,
+    which is why this is a GET that a wall board must not poll. Nothing caches
+    it either, because a cached nozzle test is a lie about a head that has been
+    purged since.
+    """
+    return NozzleOut.from_domain(printer_id, await read_nozzles(session_for, pen))
+
+
+@router.post("/{printer_id}/recover", response_model=RecoveryOut)
+async def printer_recover(
+    printer_id: str,
+    pen: int = Query(default=0, ge=0, le=8, description="One cartridge, or nought for the worst."),
+    drops: int = Query(default=200, ge=1, le=2000, description="Drops to spit."),
+    session_for: PrinterSession = Depends(get_printer_session),
+) -> RecoveryOut:
+    """Purge and wipe whichever cartridge the nozzle test says needs it."""
+    before, after = await recover_head(session_for, pen=pen, drops=drops)
+    if after is None:
+        return RecoveryOut(
+            printer_id=printer_id,
+            before=before.dead,
+            after=before.dead,
+            recovered=0,
+            advice=before.advice.value,
+            retested=False,
+        )
+    return RecoveryOut(
+        printer_id=printer_id,
+        before=before.dead,
+        after=after.dead,
+        recovered=before.dead - after.dead,
+        advice=after.advice.value,
+        retested=True,
+    )
 
 
 @router.get("/{printer_id}/config", response_model=ConfigOut)

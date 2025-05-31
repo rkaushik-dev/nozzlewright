@@ -21,6 +21,7 @@ from nozzlewright.fleet.poller import PollResult
 from nozzlewright.fleet.registry import PrinterRecord
 from nozzlewright.printer.config import PrinterConfig
 from nozzlewright.printer.ink import InkReading
+from nozzlewright.printer.nozzles import HeadHealth
 from nozzlewright.printer.operations import ApplyReport
 from nozzlewright.printer.status import PrinterStatus
 from nozzlewright.storage.models import AlarmRecord, LabelRevision
@@ -149,6 +150,52 @@ class StatusOut(BaseModel):
             severity="stop",
             alarms=["UNREACHABLE"],
         )
+
+
+class NozzleRowOut(BaseModel):
+    """One cartridge out of a nozzle test."""
+
+    pen: int
+    dead: int
+    nozzles: int
+    worst_gap: int
+    advice: str
+
+
+class NozzleOut(BaseModel):
+    """A whole nozzle test."""
+
+    printer_id: str
+    dead: int
+    nozzles: int
+    advice: str
+    worst_pen: int
+    summary: str
+    pens: list[NozzleRowOut] = Field(default_factory=list)
+
+    @classmethod
+    def from_domain(cls, printer_id: str, health: HeadHealth) -> NozzleOut:
+        """Build one from a decoded nozzle test."""
+        return cls(
+            printer_id=printer_id,
+            dead=health.dead,
+            nozzles=health.nozzles,
+            advice=health.advice.value,
+            worst_pen=health.worst_pen,
+            summary=health.summary(),
+            pens=[NozzleRowOut(**row) for row in health.as_rows()],  # type: ignore[arg-type]
+        )
+
+
+class RecoveryOut(BaseModel):
+    """What a purge and wipe achieved."""
+
+    printer_id: str
+    before: int
+    after: int
+    recovered: int
+    advice: str
+    retested: bool
 
 
 class InkOut(BaseModel):

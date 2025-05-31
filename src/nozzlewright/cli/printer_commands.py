@@ -13,8 +13,16 @@ from pathlib import Path
 import typer
 
 from nozzlewright.cli.context import Context
-from nozzlewright.cli.output import emit
-from nozzlewright.printer.operations import apply_config, read_config, read_ink, read_status
+from nozzlewright.cli.output import emit, fail
+from nozzlewright.printer.nozzles import Advice, HeadHealth
+from nozzlewright.printer.operations import (
+    apply_config,
+    read_config,
+    read_ink,
+    read_nozzles,
+    read_status,
+    recover_head,
+)
 from nozzlewright.printer.snapshot import parse_config_table, render_config_table
 from nozzlewright.protocol.codec import parse_table
 
@@ -79,6 +87,64 @@ def printer_ink(
         ]
 
     emit(run(work()), as_json)
+
+
+@printer_app.command("nozzles")
+def printer_nozzles(
+    ctx: typer.Context,
+    printer_id: str = typer.Argument(...),
+    pen: int = typer.Option(0, help="One cartridge, or nought for all of them."),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """Run a nozzle test and say what the head can still print."""
+    from nozzlewright.cli.main import run
+
+    context = _context(ctx)
+
+    async def work() -> list[dict[str, object]]:
+        async with context.connected(printer_id) as session:
+            return (await read_nozzles(session, pen)).as_rows()
+
+    rows = run(work())
+    if not rows:
+        typer.echo("the machine reported no nozzle rows")
+        return
+    emit(rows, as_json)
+
+
+@printer_app.command("recover")
+def printer_recover(
+    ctx: typer.Context,
+    printer_id: str = typer.Argument(...),
+    pen: int = typer.Option(0, help="One cartridge, or nought for the worst one."),
+    drops: int = typer.Option(200, min=1, max=2000, help="Drops to spit."),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """Purge and wipe whichever cartridge the nozzle test says needs it."""
+    from nozzlewright.cli.main import run
+
+    context = _context(ctx)
+
+    async def work() -> tuple[HeadHealth, HeadHealth | None]:
+        async with context.connected(printer_id) as session:
+            return await recover_head(session, pen=pen, drops=drops)
+
+    before, after = run(work())
+    if after is None and before.advice is Advice.REPLACE:
+        raise fail("pen %d is worn out, %s" % (before.worst_pen, before.summary()))
+    if after is None:
+        emit({"printer_id": printer_id, "before": before.dead, "after": before.dead}, as_json)
+        return
+    emit(
+        {
+            "printer_id": printer_id,
+            "before": before.dead,
+            "after": after.dead,
+            "recovered": before.dead - after.dead,
+            "advice": after.advice.value,
+        },
+        as_json,
+    )
 
 
 @printer_app.command("config")
