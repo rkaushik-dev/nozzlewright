@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from nozzlewright.fleet.alarms import escalated
 from nozzlewright.fleet.poller import PollResult
 from nozzlewright.fleet.registry import PrinterRecord
+from nozzlewright.labels.diff import LabelDiff
 from nozzlewright.printer.config import PrinterConfig
 from nozzlewright.printer.ink import InkReading
 from nozzlewright.printer.nozzles import HeadHealth
@@ -149,6 +150,40 @@ class StatusOut(BaseModel):
             healthy=False,
             severity="stop",
             alarms=["UNREACHABLE"],
+        )
+
+
+class ChangeOut(BaseModel):
+    """One difference between two label revisions."""
+
+    kind: str
+    subject: str
+    attribute: str = ""
+    before: str = ""
+    after: str = ""
+    significant: bool = True
+
+
+class DiffOut(BaseModel):
+    """What changed between two revisions of one label."""
+
+    name: str
+    left: int
+    right: int
+    changes: list[ChangeOut] = Field(default_factory=list)
+    needs_signoff: bool = False
+    summary: str = ""
+
+    @classmethod
+    def from_domain(cls, result: LabelDiff, *, left: int, right: int) -> DiffOut:
+        """Build one from a structural diff."""
+        return cls(
+            name=result.name,
+            left=left,
+            right=right,
+            changes=[ChangeOut(**row) for row in result.as_rows()],  # type: ignore[arg-type]
+            needs_signoff=result.needs_signoff,
+            summary=result.summary(),
         )
 
 

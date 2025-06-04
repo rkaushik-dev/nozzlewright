@@ -7,11 +7,12 @@ moment it uploads rather than at the moment a line tries to print it.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from nozzlewright.api.deps import get_session, require_key
-from nozzlewright.api.schemas import LabelIn, LabelOut
+from nozzlewright.api.schemas import DiffOut, LabelIn, LabelOut
+from nozzlewright.labels.diff import diff_labels
 from nozzlewright.labels.parser import parse_label
 from nozzlewright.labels.store import content_hash
 from nozzlewright.labels.writer import render_label_source
@@ -52,6 +53,42 @@ def list_revisions(name: str, session: Session = Depends(get_session)) -> list[L
             status_code=status.HTTP_404_NOT_FOUND, detail="no label called %s" % name
         )
     return [LabelOut.from_row(row) for row in rows]
+
+
+@router.get("/{name}/diff", response_model=DiffOut)
+def diff_revisions(
+    name: str,
+    left: int | None = Query(default=None, ge=1, description="Older revision, default previous."),
+    right: int | None = Query(default=None, ge=1, description="Newer revision, default latest."),
+    session: Session = Depends(get_session),
+) -> DiffOut:
+    """Compare two stored revisions of one label.
+
+    With no revisions named it compares the last two, which is the question
+    somebody asks when a line started printing something different this
+    morning and nobody will say what they changed.
+    """
+    rows = {row.revision: row for row in LabelRepo(session).revisions(name)}
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="no label called %s" % name
+        )
+    numbers = sorted(rows)
+    if len(numbers) < 2 and (left is None or right is None):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="%s has only one revision, there is nothing to compare" % name,
+        )
+    older = left if left is not None else numbers[-2]
+    newer = right if right is not None else numbers[-1]
+    for wanted in (older, newer):
+        if wanted not in rows:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="%s has no revision %d" % (name, wanted),
+            )
+    result = diff_labels(parse_label(rows[older].source), parse_label(rows[newer].source))
+    return DiffOut.from_domain(result, left=older, right=newer)
 
 
 @router.put("/{name}", response_model=LabelOut, status_code=status.HTTP_201_CREATED)

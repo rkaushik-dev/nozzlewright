@@ -17,8 +17,9 @@ from pathlib import Path
 import typer
 
 from nozzlewright.cli.context import Context
-from nozzlewright.cli.output import emit
+from nozzlewright.cli.output import emit, fail
 from nozzlewright.errors import LabelError
+from nozzlewright.labels.diff import diff_labels
 from nozzlewright.labels.fields import FieldContext, ShiftWindow
 from nozzlewright.labels.font_data import FIVE_BY_SEVEN
 from nozzlewright.labels.fontops import register_standard_family
@@ -166,6 +167,55 @@ def label_save(
     template = parse_label(source.read_text(encoding="utf-8"))
     record = _store(ctx).save(template)
     typer.echo("saved %s at revision %d" % (record.name, record.revision))
+
+
+@label_app.command("diff")
+def label_diff(
+    ctx: typer.Context,
+    left: Path = typer.Argument(..., help="The revision that is running now."),
+    right: Path = typer.Argument(..., help="The revision somebody wants to run."),
+    significant_only: bool = typer.Option(
+        False, "--significant", help="Hide the changes nobody has to sign off."
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """Compare two label files and say what actually changed.
+
+    Exits one when there is anything a quality person has to approve, so a
+    change control script can gate on it.
+    """
+    before = parse_label(left.read_text(encoding="utf-8"))
+    after = parse_label(right.read_text(encoding="utf-8"))
+    result = diff_labels(before, after)
+    rows = result.as_rows()
+    if significant_only:
+        rows = [row for row in rows if row["significant"]]
+    if not rows:
+        typer.echo("nothing that needs signing off" if significant_only else result.summary())
+        return
+    emit(rows, as_json)
+    if result.needs_signoff:
+        typer.secho(result.summary(), fg=typer.colors.YELLOW, err=True)
+        raise typer.Exit(code=1)
+
+
+@label_app.command("stored-diff")
+def label_stored_diff(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="Label in the site store."),
+    against: Path = typer.Argument(..., help="A label file to compare it with."),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """Compare a stored label with a file, without storing the file."""
+    before = _store(ctx).load(name)
+    after = parse_label(against.read_text(encoding="utf-8"))
+    if after.name != name:
+        raise fail("that file is %s, not %s" % (after.name, name))
+    result = diff_labels(before, after)
+    if not result:
+        typer.echo(result.summary())
+        return
+    emit(result.as_rows(), as_json)
 
 
 @label_app.command("show")
