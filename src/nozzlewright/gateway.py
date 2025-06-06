@@ -40,6 +40,7 @@ from nozzlewright.printer.status import Severity
 from nozzlewright.session.auth import Credentials
 from nozzlewright.session.supervisor import PrinterSession
 from nozzlewright.settings import Settings, load_settings
+from nozzlewright.siteconfig import SiteConfig, load_site, site_path
 from nozzlewright.storage.engine import build_engine, build_sessionmaker, session_scope
 from nozzlewright.storage.janitor import Janitor, Retention, SweepResult
 from nozzlewright.storage.recorder import Recorder
@@ -75,6 +76,7 @@ class Gateway:
     engine: Engine | None = field(default=None, init=False)
     factory: sessionmaker[Session] | None = field(default=None, init=False)
     registry: Registry = field(default_factory=Registry, init=False)
+    site: SiteConfig = field(default_factory=SiteConfig, init=False)
     poller: FleetPoller | None = field(default=None, init=False)
     recorder: Recorder | None = field(default=None, init=False)
     janitor: Janitor | None = field(default=None, init=False)
@@ -114,11 +116,10 @@ class Gateway:
         upgrade(self.engine, self.database_url)
         self.factory = build_sessionmaker(self.engine)
 
-        self.registry = (
-            Registry.load(self.registry_path)
-            if self.registry_path.exists()
-            else Registry(site_id=self.settings.site_id)
-        )
+        assert self.state_dir is not None
+        self.site = load_site(site_path(self.state_dir))
+        self.settings = self.site.apply_to(self.settings)
+        self.registry = self._load_registry()
         self._sync_registry()
 
         self.metrics = Metrics(site_id=self.settings.site_id)
@@ -246,6 +247,19 @@ class Gateway:
             link_settings=settings.link,
             session_settings=settings.session,
         )
+
+    def _load_registry(self) -> Registry:
+        """The machines this site has, from the file that owns them.
+
+        A site file that names machines is the whole list. Otherwise the saved
+        registry is, and a site with neither starts empty and waits for
+        somebody to add one.
+        """
+        if self.site.printers:
+            return self.site.registry()
+        if self.registry_path.exists():
+            return Registry.load(self.registry_path)
+        return Registry(site_id=self.settings.site_id)
 
     def _sync_registry(self) -> None:
         """Make sure every registered machine has a row."""

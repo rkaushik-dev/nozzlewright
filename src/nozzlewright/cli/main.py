@@ -55,7 +55,9 @@ def _context(ctx: typer.Context) -> Context:
 @app.callback()
 def root(
     ctx: typer.Context,
-    state_dir: Path | None = typer.Option(None, help="Where the registry and database live."),
+    state_dir: Path | None = typer.Option(
+        None, help="Where the site file, the registry and the database live."
+    ),
     user: str = typer.Option("", help="Operator to log in as."),
     pin: str = typer.Option("", help="Operator PIN."),
     log_level: str = typer.Option("WARNING", help="Log level for the tool itself."),

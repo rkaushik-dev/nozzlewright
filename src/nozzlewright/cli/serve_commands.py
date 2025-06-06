@@ -29,6 +29,9 @@ from nozzlewright.storage.schema import current_revision, head_revision, upgrade
 from nozzlewright.telemetry.logging import get_logger
 from nozzlewright.telemetry.metrics import CONTENT_TYPE
 
+#: What the retention flag says when nobody has touched it.
+DEFAULT_RETENTION_DAYS = 14
+
 __all__ = ["attach_lifespan", "build_gateway", "db_app", "serve_app"]
 
 _log = get_logger("nozzlewright.serve")
@@ -48,8 +51,15 @@ def build_gateway(
     retention_days: int,
     api_keys: str,
 ) -> Gateway:
-    """Assemble a gateway from the command line context."""
+    """Assemble a gateway from the command line context.
+
+    Keys given on the command line replace the ones in the site file rather
+    than adding to them, so a person who has to start a gateway with one known
+    key can do it without editing anything.
+    """
     keys = frozenset(part.strip() for part in api_keys.split(",") if part.strip())
+    if not keys:
+        keys = context.site.api_keys
     credentials: Credentials | None = None
     if context.user:
         credentials = Credentials(name=context.user, pin=context.pin)
@@ -57,7 +67,7 @@ def build_gateway(
         settings=context.settings,
         state_dir=context.state_dir,
         poll_interval_s=poll_interval_s,
-        retention=Retention(samples=timedelta(days=retention_days)),
+        retention=_retention(context, retention_days),
         api_keys=keys,
         credentials=credentials,
         simulate=context.simulate,
@@ -87,13 +97,25 @@ def attach_lifespan(gateway: Gateway, app: FastAPI) -> FastAPI:
     return app
 
 
+def _retention(context: Context, retention_days: int) -> Retention:
+    """The retention this run should use.
+
+    The default on the flag is fourteen days, which is also the default in the
+    janitor, so a flag left alone must not overwrite a site file that says
+    something else. Anything other than the default is somebody meaning it.
+    """
+    if retention_days != DEFAULT_RETENTION_DAYS:
+        return Retention(samples=timedelta(days=retention_days))
+    return context.site.retention
+
+
 @serve_app.callback(invoke_without_command=True)
 def serve(
     ctx: typer.Context,
     host: str = typer.Option("0.0.0.0", help="Address to listen on."),
     port: int = typer.Option(8420, help="Port to listen on."),
     poll_interval: float = typer.Option(15.0, help="Seconds between readings of a machine."),
-    retention_days: int = typer.Option(14, help="How long readings are kept."),
+    retention_days: int = typer.Option(DEFAULT_RETENTION_DAYS, help="How long readings are kept."),
     api_keys: str = typer.Option("", help="Comma separated API keys. Empty leaves it open."),
 ) -> None:
     """Serve the API and poll the site until stopped."""
@@ -155,7 +177,7 @@ def db_status(
 @db_app.command("prune")
 def db_prune(
     ctx: typer.Context,
-    retention_days: int = typer.Option(14, help="How long readings are kept."),
+    retention_days: int = typer.Option(DEFAULT_RETENTION_DAYS, help="How long readings are kept."),
     as_json: bool = typer.Option(False, "--json", help="Machine readable output."),
 ) -> None:
     """Delete everything past its retention, once."""

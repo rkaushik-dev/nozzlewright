@@ -22,6 +22,7 @@ from nozzlewright.fleet.registry import PrinterRecord, Registry
 from nozzlewright.session.auth import Credentials
 from nozzlewright.session.supervisor import PrinterSession
 from nozzlewright.settings import Settings, load_settings
+from nozzlewright.siteconfig import SiteConfig, load_site, site_path
 from nozzlewright.transport.base import Transport
 from nozzlewright.transport.loopback import LoopbackTransport
 from nozzlewright.transport.rfcomm import RfcommTransport
@@ -72,10 +73,14 @@ class Context:
     pin: str = field(default="", repr=False)
     simulate: bool = False
     machines: dict[str, object] = field(default_factory=dict)
+    site: SiteConfig = field(default_factory=SiteConfig)
 
     def __post_init__(self) -> None:
         if self.state_dir is None:
             self.state_dir = Path(self.settings.state_dir)
+        if self.site.source is None:
+            self.site = load_site(site_path(self.state_dir))
+            self.settings = self.site.apply_to(self.settings)
 
     @property
     def registry_path(self) -> Path:
@@ -90,13 +95,32 @@ class Context:
         return "sqlite:///%s" % (self.state_dir / DATABASE_NAME).as_posix()
 
     def load_registry(self) -> Registry:
-        """Read the registry, or start an empty one."""
+        """The machines on this site.
+
+        The site file wins when it names any, because a file somebody edits and
+        keeps in version control beats a JSON file the tool wrote itself. The
+        saved registry is what a site that never wrote a site file has, and
+        both have to keep working: a technician adding a machine with
+        ``registry add`` on a laptop is not going to hand edit TOML first.
+        """
+        if self.site.printers:
+            return self.site.registry()
         if not self.registry_path.exists():
             return Registry(site_id=self.settings.site_id)
         return Registry.load(self.registry_path)
 
+    def save_allowed(self) -> bool:
+        """False when the machines came from a file the tool must not rewrite."""
+        return not self.site.printers
+
     def save_registry(self, registry: Registry) -> None:
-        """Write the registry back."""
+        """Write the registry back, unless the site file owns the machines."""
+        if not self.save_allowed():
+            raise ConfigError(
+                "registry",
+                str(self.site.source),
+                "the machines come from the site file, edit that instead",
+            )
         registry.save(self.registry_path)
 
     def credentials(self) -> Credentials | None:
