@@ -3,17 +3,18 @@ from __future__ import annotations
 import csv
 import io
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
-from nozzlewright.cli.fleet_commands import SHIFTS, resolve_window
+from nozzlewright.cli.fleet_commands import SPECIAL_SHIFTS, resolve_window
 from nozzlewright.cli.main import app
 from nozzlewright.errors import NozzlewrightError
 from nozzlewright.fleet.poller import PollResult
 from nozzlewright.fleet.registry import PrinterRecord
+from nozzlewright.labels.fields import ShiftWindow
 from nozzlewright.printer.job import JobOutcome, JobResult
 from nozzlewright.printer.status import Alarm, MachineState, PrinterStatus
 from nozzlewright.storage.engine import build_engine, build_sessionmaker, session_scope
@@ -72,8 +73,47 @@ def invoke(tmp_path: Path, *args: str) -> object:
     return runner.invoke(app, ["--state-dir", str(tmp_path), *args])
 
 
-def test_the_shift_names_cover_a_day() -> None:
-    assert set(SHIFTS) == {"a", "b", "c", "day"}
+def test_the_words_that_are_not_shift_codes() -> None:
+    assert set(SPECIAL_SHIFTS) == {"day", "now", "last"}
+
+
+def test_a_day_runs_from_the_first_shift() -> None:
+    start, end = resolve_window("", "", "day", "", now=NOW)
+    assert start == datetime(2025, 4, 10, 6, 0, tzinfo=UTC)
+    assert end - start == timedelta(days=1)
+
+
+def test_the_shift_that_is_running() -> None:
+    start, end = resolve_window("", "", "now", "", now=NOW)
+    assert start <= NOW < end
+
+
+def test_the_shift_before_this_one() -> None:
+    running = resolve_window("", "", "now", "", now=NOW)
+    previous = resolve_window("", "", "last", "", now=NOW)
+    assert previous[1] == running[0]
+    assert previous[1] - previous[0] == timedelta(hours=8)
+
+
+def test_a_twelve_hour_pattern() -> None:
+    pattern = (
+        ShiftWindow(code="D", start=time(7, 0), end=time(19, 0)),
+        ShiftWindow(code="N", start=time(19, 0), end=time(7, 0)),
+    )
+    start, end = resolve_window("", "", "d", "", now=NOW, pattern=pattern)
+    assert end - start == timedelta(hours=12)
+
+
+def test_a_shift_code_the_site_does_not_run() -> None:
+    pattern = (ShiftWindow(code="D", start=time(7, 0), end=time(19, 0)),)
+    with pytest.raises(NozzlewrightError, match="not one of"):
+        resolve_window("", "", "b", "", now=NOW, pattern=pattern)
+
+
+def test_asking_for_now_in_a_gap() -> None:
+    pattern = (ShiftWindow(code="D", start=time(7, 0), end=time(11, 0)),)
+    with pytest.raises(NozzlewrightError, match="no shift is running"):
+        resolve_window("", "", "now", "", now=NOW, pattern=pattern)
 
 
 def test_a_shift_window() -> None:

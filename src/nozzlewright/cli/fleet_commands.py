@@ -4,16 +4,21 @@ These read the database rather than the machines, so they work when the line is
 off and they work on a copy of the gateway database taken to an office. That is
 the whole point of writing the readings down.
 
-Windows are given as ``--since`` and ``--until`` in ISO form, or as a shift name
-that the site has agreed on. The shift form is what people actually type, and
-translating it here means the same three words mean the same eight hours
-whichever command is being run.
+Windows are given as ``--since`` and ``--until`` in ISO form, or as a shift
+code. The shift form is what people actually type, and translating it in one
+place means the same word means the same hours whichever command is being run.
+
+The codes come from the site file, not from a table in here. That used to be a
+dictionary of three eight hour shifts, which is right for most sites and wrong
+for every site running twelve hour shifts, and being wrong about it silently
+produced a report over the wrong window rather than an error.
 """
 
 from __future__ import annotations
 
 import sys
-from datetime import UTC, datetime, time, timedelta
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import typer
@@ -23,20 +28,17 @@ from nozzlewright.cli.output import emit, fail
 from nozzlewright.errors import NozzlewrightError
 from nozzlewright.fleet.export import write_alarms, write_jobs, write_samples
 from nozzlewright.fleet.report import build_report
+from nozzlewright.fleet.shifts import DEFAULT_PATTERN, shift_at, spans_for_day
+from nozzlewright.labels.fields import ShiftWindow
 from nozzlewright.storage.engine import build_engine, build_sessionmaker, session_scope
 from nozzlewright.storage.repo import AlarmRepo, JobRepo, PrinterRepo
 
-__all__ = ["SHIFTS", "fleet_app", "resolve_window"]
+__all__ = ["fleet_app", "resolve_window"]
 
 fleet_app = typer.Typer(help="Read what the site has been doing.")
 
-#: The shift names sites use, as offsets into a day.
-SHIFTS = {
-    "a": (time(6, 0), timedelta(hours=8)),
-    "b": (time(14, 0), timedelta(hours=8)),
-    "c": (time(22, 0), timedelta(hours=8)),
-    "day": (time(0, 0), timedelta(days=1)),
-}
+#: Shift words that are not a code off the site pattern.
+SPECIAL_SHIFTS = ("day", "now", "last")
 
 
 def _context(ctx: typer.Context) -> Context:
@@ -52,27 +54,71 @@ def _parse(text: str, field: str) -> datetime:
 
 
 def resolve_window(
-    since: str, until: str, shift: str, on: str, now: datetime | None = None
+    since: str,
+    until: str,
+    shift: str,
+    on: str,
+    now: datetime | None = None,
+    pattern: Sequence[ShiftWindow] = DEFAULT_PATTERN,
 ) -> tuple[datetime, datetime]:
     """Work out the window a command should cover.
 
     A shift wins over an explicit window, because somebody who typed both meant
     the shift and left the other option in their shell history.
+
+    Three words are not codes. ``day`` is the whole production day, which
+    starts when the first shift does rather than at midnight, because that is
+    what a day means to the people counting output. ``now`` is the shift that
+    is running. ``last`` is the one before it, which is what a supervisor
+    walking in at six in the morning wants and would otherwise have to work
+    out on their fingers.
     """
     moment = now or datetime.now(UTC)
     if shift:
-        key = shift.strip().lower()
-        if key not in SHIFTS:
-            raise NozzlewrightError("shift %r is not one of %s" % (shift, ", ".join(sorted(SHIFTS))))
-        start_time, length = SHIFTS[key]
-        day = _parse(on, "on").date() if on else moment.date()
-        start = datetime.combine(day, start_time, tzinfo=UTC)
-        return start, start + length
+        return _shift_window(shift, on, moment, pattern)
     if since and until:
         return _parse(since, "since"), _parse(until, "until")
     if since:
         return _parse(since, "since"), moment
     return moment - timedelta(hours=8), moment
+
+
+def _shift_window(
+    shift: str, on: str, moment: datetime, pattern: Sequence[ShiftWindow]
+) -> tuple[datetime, datetime]:
+    """The window one shift word names."""
+    key = shift.strip().lower()
+    day = _parse(on, "on").date() if on else moment.date()
+
+    if key == "day":
+        spans = spans_for_day(day, pattern)
+        return spans[0].start, spans[0].start + timedelta(days=1)
+    if key in ("now", "last"):
+        running = shift_at(moment, pattern)
+        if running is None:
+            raise NozzlewrightError("no shift is running, name one or give a window")
+        if key == "now":
+            return running.start, running.end
+        return _previous(running.start, pattern)
+
+    for span in spans_for_day(day, pattern):
+        if span.code.lower() == key:
+            return span.start, span.end
+    known = [window.code.lower() for window in pattern] + list(SPECIAL_SHIFTS)
+    raise NozzlewrightError("shift %r is not one of %s" % (shift, ", ".join(sorted(known))))
+
+
+def _previous(start: datetime, pattern: Sequence[ShiftWindow]) -> tuple[datetime, datetime]:
+    """The shift that finished where this one started."""
+    before = shift_at(start - timedelta(seconds=1), pattern)
+    if before is None:
+        raise NozzlewrightError("nothing ran before that shift, give a window instead")
+    return before.start, before.end
+
+
+def _pattern(context: Context) -> Sequence[ShiftWindow]:
+    """The shift pattern this site runs, or the usual three."""
+    return context.site.shifts or DEFAULT_PATTERN
 
 
 def _factory(context: Context) -> object:
@@ -155,12 +201,12 @@ def fleet_report(
     ctx: typer.Context,
     since: str = typer.Option("", help="Window start, ISO form."),
     until: str = typer.Option("", help="Window end, ISO form."),
-    shift: str = typer.Option("", help="Shift name: a, b, c or day."),
+    shift: str = typer.Option("", help="Shift code, or day, now or last."),
     on: str = typer.Option("", help="Which day the shift is on, ISO form."),
 ) -> None:
     """The shift report."""
     context = _context(ctx)
-    start, end = resolve_window(since, until, shift, on)
+    start, end = resolve_window(since, until, shift, on, pattern=_pattern(context))
     with session_scope(_factory(context)) as session:  # type: ignore[arg-type]
         report = build_report(session, context.settings.site_id, start, end)
     typer.echo(report.render())
@@ -173,13 +219,13 @@ def fleet_export(
     out: Path | None = typer.Option(None, help="Write here instead of to standard output."),
     since: str = typer.Option("", help="Window start, ISO form."),
     until: str = typer.Option("", help="Window end, ISO form."),
-    shift: str = typer.Option("", help="Shift name: a, b, c or day."),
+    shift: str = typer.Option("", help="Shift code, or day, now or last."),
     on: str = typer.Option("", help="Which day the shift is on, ISO form."),
     printer_id: str = typer.Option("", help="Only this machine."),
 ) -> None:
     """Write rows out as CSV."""
     context = _context(ctx)
-    start, end = resolve_window(since, until, shift, on)
+    start, end = resolve_window(since, until, shift, on, pattern=_pattern(context))
     writers = {"samples": write_samples, "runs": write_jobs, "alarms": write_alarms}
     writer = writers.get(what.strip().lower())
     if writer is None:
