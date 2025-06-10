@@ -23,6 +23,7 @@ from nozzlewright.labels.fields import FieldContext
 from nozzlewright.labels.fonts import FontStore
 from nozzlewright.labels.raster import render_label
 from nozzlewright.labels.template import (
+    SYMBOLOGIES,
     BarcodeElement,
     LabelTemplate,
     RuleElement,
@@ -186,12 +187,40 @@ def _check_text(element: TextElement, template: LabelTemplate, fonts: FontStore)
     return findings
 
 
+def _check_code39(element: BarcodeElement) -> list[Finding]:
+    """The two things that go wrong on a Code 39 label.
+
+    Code 39 with no check character is what most sites ask for and it is also
+    what lets a single misread bar turn one part number into another, so it is
+    a note rather than a warning: worth saying, not worth blocking.
+    """
+    findings: list[Finding] = []
+    if not element.check_digit:
+        findings.append(
+            Finding(Grade.NOTE, element.name, "code 39 without a check character is unprotected")
+        )
+    if element.wide_ratio < 3 and element.module_dots < 3:
+        findings.append(
+            Finding(
+                Grade.WARN,
+                element.name,
+                "a two to one ratio at %d dots is at the edge of what reads" % element.module_dots,
+            )
+        )
+    return findings
+
+
 def _check_barcode(element: BarcodeElement, head: HeadGeometry) -> list[Finding]:
     """Scannability checks for one barcode."""
     findings: list[Finding] = []
-    if element.symbology.upper() != "CODE128":
-        findings.append(Finding(Grade.STOP, element.name, "this machine only prints code 128"))
+    symbology = element.symbology.upper()
+    if symbology not in SYMBOLOGIES:
+        findings.append(
+            Finding(Grade.STOP, element.name, "this build does not print %s" % element.symbology)
+        )
         return findings
+    if symbology == "CODE39":
+        findings.extend(_check_code39(element))
     if element.module_dots < MIN_SCANNABLE_MODULE:
         findings.append(
             Finding(

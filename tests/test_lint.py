@@ -128,10 +128,48 @@ def test_a_short_barcode_is_a_warning() -> None:
 
 
 def test_a_symbology_this_machine_cannot_print() -> None:
-    other = GOOD.replace("BARCODE code 0,56 serial", "BARCODE code 0,56 serial symbology=EAN13")
+    other = GOOD.replace("symbology=CODE128 ", "").replace(
+        "BARCODE code 0,56 serial height=40 module=3 human=0",
+        "BARCODE code 0,56 serial height=40 module=3 human=0 symbology=EAN13",
+    )
     report = check(other)
     assert not report.ok
-    assert any("code 128" in item.message for item in report.of(Grade.STOP))
+    assert any("does not print EAN13" in item.message for item in report.of(Grade.STOP))
+
+
+def test_code_39_without_a_check_character() -> None:
+    other = GOOD.replace(
+        "BARCODE code 0,56 serial height=40 module=3 human=0",
+        "BARCODE code 0,56 serial height=40 module=3 human=0 symbology=CODE39",
+    )
+    report = check(other)
+    assert any("unprotected" in item.message for item in report.of(Grade.NOTE))
+
+
+def test_code_39_with_a_check_character() -> None:
+    other = GOOD.replace(
+        "BARCODE code 0,56 serial height=40 module=3 human=0",
+        "BARCODE code 0,56 serial height=40 module=3 human=0 symbology=CODE39 check=1",
+    )
+    assert not [item for item in check(other).of(Grade.NOTE) if "unprotected" in item.message]
+
+
+def test_a_thin_two_to_one_code_39() -> None:
+    other = GOOD.replace(
+        "BARCODE code 0,56 serial height=40 module=3 human=0",
+        "BARCODE code 0,56 serial height=40 module=2 human=0 symbology=CODE39 check=1",
+    )
+    report = check(other)
+    assert any("edge of what reads" in item.message for item in report.of(Grade.WARN))
+
+
+def test_a_wide_ratio_code_39_is_left_alone() -> None:
+    other = GOOD.replace(
+        "BARCODE code 0,56 serial height=40 module=3 human=0",
+        "BARCODE code 0,56 serial height=40 module=2 human=0 symbology=CODE39 check=1 ratio=3",
+    )
+    report = check(other)
+    assert not [item for item in report.of(Grade.WARN) if "edge of what reads" in item.message]
 
 
 def test_a_rule_taller_than_the_label() -> None:

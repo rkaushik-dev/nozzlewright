@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from nozzlewright.errors import LabelError
-from nozzlewright.labels import code128
+from nozzlewright.labels import code39, code128
 from nozzlewright.labels.fonts import FontStore
 from nozzlewright.labels.matrix import DotMatrix
 from nozzlewright.labels.template import (
@@ -119,6 +119,24 @@ def _render_text(
     matrix.blit(columns, at_x=element.placement.x, at_y=element.placement.y)
 
 
+def _modules_for(element: BarcodeElement, text: str) -> list[bool]:
+    """The bar pattern one barcode element asks for.
+
+    The element has already been validated, so an unknown symbology here is a
+    caller that built one by hand rather than through the parser, and it is
+    still worth refusing rather than silently printing code 128.
+    """
+    symbology = element.symbology.upper()
+    if symbology == "CODE128":
+        return code128.modules_for(text)
+    if symbology == "CODE39":
+        return code39.modules_for(text, check=element.check_digit, ratio=element.wide_ratio)
+    raise LabelError(
+        "barcode %s asks for %s and this build does not print it"
+        % (element.name, element.symbology)
+    )
+
+
 def _render_barcode(
     matrix: DotMatrix,
     element: BarcodeElement,
@@ -126,11 +144,6 @@ def _render_barcode(
     fonts: FontStore,
     height_dots: int,
 ) -> None:
-    if element.symbology.upper() != "CODE128":
-        raise LabelError(
-            "barcode %s asks for %s and this machine prints code 128"
-            % (element.name, element.symbology)
-        )
     if not text:
         raise LabelError("barcode %s has nothing to encode" % element.name)
 
@@ -147,7 +160,7 @@ def _render_barcode(
 
     band = ((1 << element.height_dots) - 1) << element.placement.y
     columns: list[int] = []
-    for module in code128.modules_for(text):
+    for module in _modules_for(element, text):
         columns.extend([band if module else 0] * element.module_dots)
     matrix.blit(columns, at_x=element.placement.x)
 

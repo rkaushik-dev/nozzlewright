@@ -21,10 +21,12 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 
 from nozzlewright.errors import LabelError
+from nozzlewright.labels import code39
 from nozzlewright.labels.fields import Field, FieldContext
 
 __all__ = [
     "MAX_LABEL_WIDTH_DOTS",
+    "SYMBOLOGIES",
     "BarcodeElement",
     "Element",
     "LabelTemplate",
@@ -37,6 +39,9 @@ __all__ = [
 
 #: Widest message the column buffer holds.
 MAX_LABEL_WIDTH_DOTS = 8192
+
+#: The symbologies this build can raster.
+SYMBOLOGIES = frozenset({"CODE128", "CODE39"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +136,10 @@ class BarcodeElement(Element):
     module_dots: int = 2
     human_readable: bool = True
     text_font: str = "5x7"
+    #: Code 39 only. Adds the modulo forty three check character.
+    check_digit: bool = False
+    #: Code 39 only. How many narrow modules a wide element is.
+    wide_ratio: int = 2
 
     @property
     def source_field(self) -> str:
@@ -147,6 +156,15 @@ class BarcodeElement(Element):
                 "barcode %s has a module width of %d, the range is one to eight"
                 % (self.name, self.module_dots)
             )
+        # A symbology this build cannot raster is deliberately not refused
+        # here. The lint pass reports it as one finding among several, which is
+        # what somebody fixing a label wants, and a parse error would hide
+        # every other problem in the file behind the first one.
+        if not code39.MIN_RATIO <= self.wide_ratio <= code39.MAX_RATIO:
+            raise LabelError(
+                "barcode %s has a wide ratio of %d, the range is %d to %d"
+                % (self.name, self.wide_ratio, code39.MIN_RATIO, code39.MAX_RATIO)
+            )
 
     def to_source(self) -> str:
         parts = ["BARCODE %s %s %s" % (self.name, self._where, self.source)]
@@ -160,6 +178,10 @@ class BarcodeElement(Element):
             parts.append("human=0")
         if self.text_font != "5x7":
             parts.append("font=%s" % self.text_font)
+        if self.check_digit:
+            parts.append("check=1")
+        if self.wide_ratio != 2:
+            parts.append("ratio=%d" % self.wide_ratio)
         return " ".join(parts)
 
 

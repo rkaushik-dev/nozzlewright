@@ -183,6 +183,8 @@ def _parse_barcode(words: list[str], line_number: int) -> Element:
         placement=_placement(words[1], line_number),
         source=words[2],
         symbology=options.get("symbology", "CODE128").upper(),
+        check_digit=options.get("check", "0").lower() not in ("0", "no", "false", "off", ""),
+        wide_ratio=_int_option(options, "ratio", 2, line_number),
         height_dots=_int_option(options, "height", 32, line_number),
         module_dots=_int_option(options, "module", 2, line_number),
         human_readable=human,

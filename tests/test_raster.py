@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 
 from nozzlewright.errors import LabelError
-from nozzlewright.labels import code128
+from nozzlewright.labels import code39, code128
 from nozzlewright.labels.fields import FieldContext, TextField
 from nozzlewright.labels.font_data import FIVE_BY_SEVEN
 from nozzlewright.labels.fontops import register_standard_family
@@ -202,8 +202,50 @@ def test_other_symbologies_are_refused() -> None:
         fields=(TextField("a", "12345678"),),
         height=48,
     )
-    with pytest.raises(LabelError, match="prints code 128"):
+    with pytest.raises(LabelError, match="does not print it"):
         render_label(resolved, store())
+
+
+def test_a_code_39_barcode_renders() -> None:
+    resolved = label(
+        BarcodeElement(name="b", source="a", symbology="CODE39", human_readable=False),
+        fields=(TextField("a", "BOX12"),),
+        height=48,
+    )
+    matrix = render_label(resolved, store())
+    assert matrix.width == len(code39.modules_for("BOX12")) * 2
+
+
+def test_a_code_39_check_character_makes_it_wider() -> None:
+    plain = label(
+        BarcodeElement(name="b", source="a", symbology="CODE39", human_readable=False),
+        fields=(TextField("a", "BOX12"),),
+        height=48,
+    )
+    checked = label(
+        BarcodeElement(
+            name="b", source="a", symbology="CODE39", human_readable=False, check_digit=True
+        ),
+        fields=(TextField("a", "BOX12"),),
+        height=48,
+    )
+    assert render_label(checked, store()).width > render_label(plain, store()).width
+
+
+def test_a_wider_ratio_makes_a_wider_code_39() -> None:
+    narrow = label(
+        BarcodeElement(name="b", source="a", symbology="CODE39", human_readable=False),
+        fields=(TextField("a", "BOX12"),),
+        height=48,
+    )
+    wide = label(
+        BarcodeElement(
+            name="b", source="a", symbology="CODE39", human_readable=False, wide_ratio=3
+        ),
+        fields=(TextField("a", "BOX12"),),
+        height=48,
+    )
+    assert render_label(wide, store()).width > render_label(narrow, store()).width
 
 
 def test_options_invert_the_whole_message() -> None:
