@@ -30,8 +30,10 @@ from pathlib import Path
 from typing import Any, cast
 
 from nozzlewright.errors import ConfigError
+from nozzlewright.fleet.costing import NOMINAL_DROP_PL, CostModel
 from nozzlewright.fleet.registry import PrinterRecord, Registry
 from nozzlewright.labels.fields import ShiftWindow
+from nozzlewright.printer.cartridge import CartridgeSpec, InkFamily
 from nozzlewright.settings import NotifySettings, Settings, TransportKind
 from nozzlewright.storage.janitor import Retention
 from nozzlewright.telemetry.logging import get_logger
@@ -44,7 +46,7 @@ _log = get_logger("nozzlewright.siteconfig")
 SITE_FILE = "site.toml"
 
 #: Keys the top level table is allowed to carry.
-TOP_LEVEL = frozenset({"site", "shifts", "notify", "retention", "printers", "api"})
+TOP_LEVEL = frozenset({"site", "shifts", "notify", "retention", "printers", "api", "costing"})
 
 
 @dataclass
@@ -57,6 +59,7 @@ class SiteConfig:
     retention: Retention = field(default_factory=Retention)
     api_keys: frozenset[str] = frozenset()
     printers: tuple[PrinterRecord, ...] = ()
+    costing: CostModel | None = None
     source: Path | None = None
 
     def registry(self) -> Registry:
@@ -96,6 +99,8 @@ class SiteConfig:
         codes = [window.code for window in self.shifts]
         if len(set(codes)) != len(codes):
             raise ConfigError("shifts", ",".join(codes), "two shifts share a code")
+        if self.costing is not None:
+            self.costing.validate()
         try:
             self.retention.validate()
         except ValueError as error:
@@ -136,6 +141,7 @@ def load_site(path: Path) -> SiteConfig:
         retention=_retention(raw.get("retention", {})),
         api_keys=_keys(raw.get("api", {})),
         printers=_printers(raw.get("printers", [])),
+        costing=_costing(raw.get("costing", {})),
         source=path,
     )
     config.validate()
@@ -250,6 +256,42 @@ def _printers(rows: Any) -> tuple[PrinterRecord, ...]:
             )
         )
     return tuple(made)
+
+
+def _costing(table: Any) -> CostModel | None:
+    """The costing section, when a site has priced its ink.
+
+    A site with no prices in its file gets nothing rather than a default. A
+    made up cartridge price would produce a cost per thousand that looks
+    authoritative and is fiction, and somebody would put it in a tender.
+    """
+    if not isinstance(table, dict):
+        raise ConfigError("costing", type(table).__name__, "must be a table")
+    if not table:
+        return None
+    if "cartridge_price" not in table:
+        raise ConfigError("costing", str(table), "needs a cartridge_price")
+    family = str(table.get("ink", "MEK")).upper()
+    try:
+        ink = InkFamily(family)
+    except ValueError:
+        raise ConfigError(
+            "costing.ink",
+            family,
+            "must be one of %s" % ", ".join(sorted(item.value for item in InkFamily)),
+        ) from None
+    made = CostModel(
+        cartridge_price=float(table["cartridge_price"]),
+        spec=CartridgeSpec(
+            part_number=str(table.get("part_number", "unpriced")),
+            family=ink,
+            nominal_ml=float(table.get("cartridge_ml", 42.0)),
+        ),
+        drop_volume_pl=float(table.get("drop_volume_pl", NOMINAL_DROP_PL)),
+        purges_per_thousand=float(table.get("purges_per_thousand", 0.0)),
+    )
+    made.validate()
+    return made
 
 
 def _kind(value: Any) -> TransportKind:

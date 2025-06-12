@@ -11,6 +11,7 @@ ought to be reviewed.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, time
 from pathlib import Path
 
@@ -19,6 +20,7 @@ import typer
 from nozzlewright.cli.context import Context
 from nozzlewright.cli.output import emit, fail
 from nozzlewright.errors import LabelError
+from nozzlewright.fleet.costing import CostModel, cost_of_label
 from nozzlewright.labels.diff import diff_labels
 from nozzlewright.labels.fields import FieldContext, ShiftWindow
 from nozzlewright.labels.font_data import FIVE_BY_SEVEN
@@ -26,8 +28,10 @@ from nozzlewright.labels.fontops import register_standard_family
 from nozzlewright.labels.fonts import FontStore
 from nozzlewright.labels.parser import parse_label
 from nozzlewright.labels.preview import make_proof
+from nozzlewright.labels.raster import render_label
 from nozzlewright.labels.store import LabelStore
 from nozzlewright.labels.writer import render_label_source
+from nozzlewright.printer.cartridge import CartridgeSpec, InkFamily
 
 __all__ = ["DEFAULT_SHIFTS", "default_fonts", "label_app"]
 
@@ -120,6 +124,53 @@ def label_proof(
     proof = make_proof(template, default_fonts(), context, horizontal_dpi=dpi)
     typer.echo(proof.summary())
     typer.echo(proof.picture(border=not plain))
+
+
+@label_app.command("cost")
+def label_cost(
+    ctx: typer.Context,
+    source: Path = typer.Argument(..., help="A label file."),
+    price: float = typer.Option(0.0, help="Cartridge price, overriding the site file."),
+    purges: float = typer.Option(-1.0, help="Purges per thousand codes, overriding the site file."),
+    at: str = typer.Option("", help="Render as if it were this date and time."),
+    counter: int = typer.Option(1, help="Value to render counters at."),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """What one message costs to run, per thousand codes.
+
+    The message is rendered first, because the cost is the dot count and there
+    is no other honest way to get it. A label with a counter in it is rendered
+    at one value, which is close enough: the digits change and the dot count
+    barely does.
+    """
+    context = _context(ctx)
+    model = context.site.costing
+    if price > 0:
+        model = _priced(model, price)
+    if model is None:
+        raise fail("no cartridge price, put one in the site file or pass --price")
+    if purges >= 0:
+        model = replace(model, purges_per_thousand=purges)
+
+    template = parse_label(source.read_text(encoding="utf-8"))
+    field_context = FieldContext(
+        now=_when(at),
+        counters={item.name: counter for item in template.fields},
+        prompts={item.name: "X" * 4 for item in template.interactive_fields()},
+        shifts=context.site.shifts or DEFAULT_SHIFTS,
+    )
+    matrix = render_label(template.resolve(field_context), default_fonts())
+    emit(cost_of_label(template.name, matrix, model).as_dict(), as_json)
+
+
+def _priced(model: CostModel | None, price: float) -> CostModel:
+    """A cost model at a price given on the command line."""
+    if model is not None:
+        return replace(model, cartridge_price=price)
+    return CostModel(
+        cartridge_price=price,
+        spec=CartridgeSpec(part_number="unpriced", family=InkFamily.MEK),
+    )
 
 
 @label_app.command("format")
