@@ -188,3 +188,62 @@ def test_a_machine_with_nothing_still_gets_a_row(session: Session) -> None:
     report = build_report(session, "bench", START, END)
     assert [line.printer_id for line in report.machines] == ["line9"]
     assert report.machines[0].samples == 0
+
+
+def test_no_rating_means_no_oee_block(session: Session) -> None:
+    busy_shift(session)
+    report = build_report(session, "bench", START, END)
+    assert report.effectiveness is None
+    assert "OEE" not in report.render()
+
+
+def test_a_rating_adds_the_oee_block(session: Session) -> None:
+    busy_shift(session)
+    report = build_report(
+        session, "bench", START, END, poll_interval_s=15.0, rated_per_minute=200.0
+    )
+    assert report.effectiveness is not None
+    assert "OEE" in report.render()
+
+
+def test_a_rating_without_an_interval_is_not_enough(session: Session) -> None:
+    busy_shift(session)
+    report = build_report(session, "bench", START, END, poll_interval_s=0.0, rated_per_minute=200.0)
+    assert report.effectiveness is None
+
+
+def test_an_interval_without_a_rating_is_not_enough(session: Session) -> None:
+    busy_shift(session)
+    report = build_report(session, "bench", START, END, poll_interval_s=15.0, rated_per_minute=0.0)
+    assert report.effectiveness is None
+
+
+def test_the_oee_block_names_the_worst_machine(session: Session) -> None:
+    busy_shift(session)
+    report = build_report(
+        session, "bench", START, END, poll_interval_s=15.0, rated_per_minute=200.0
+    )
+    assert "worst:" in report.render()
+
+
+def test_the_oee_covers_every_machine(session: Session) -> None:
+    busy_shift(session)
+    report = build_report(
+        session, "bench", START, END, poll_interval_s=15.0, rated_per_minute=200.0
+    )
+    assert report.effectiveness is not None
+    assert len(report.effectiveness.machines) == len(report.machines)
+
+
+def test_a_slow_rating_scores_full_performance(session: Session) -> None:
+    busy_shift(session)
+    report = build_report(session, "bench", START, END, poll_interval_s=15.0, rated_per_minute=1.0)
+    assert report.effectiveness is not None
+    assert report.effectiveness.oee.performance == 1.0
+
+
+def test_a_rating_so_low_nothing_was_expected(session: Session) -> None:
+    busy_shift(session)
+    report = build_report(session, "bench", START, END, poll_interval_s=15.0, rated_per_minute=0.01)
+    assert report.effectiveness is not None
+    assert report.effectiveness.machines[0].expected == 0

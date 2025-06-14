@@ -203,12 +203,23 @@ def fleet_report(
     until: str = typer.Option("", help="Window end, ISO form."),
     shift: str = typer.Option("", help="Shift code, or day, now or last."),
     on: str = typer.Option("", help="Which day the shift is on, ISO form."),
+    rated: float = typer.Option(
+        0.0, help="Rated line speed in product per minute. Adds the OEE block."
+    ),
+    poll_interval: float = typer.Option(15.0, help="Seconds between readings, for the OEE block."),
 ) -> None:
     """The shift report."""
     context = _context(ctx)
     start, end = resolve_window(since, until, shift, on, pattern=_pattern(context))
     with session_scope(_factory(context)) as session:  # type: ignore[arg-type]
-        report = build_report(session, context.settings.site_id, start, end)
+        report = build_report(
+            session,
+            context.settings.site_id,
+            start,
+            end,
+            poll_interval_s=poll_interval,
+            rated_per_minute=rated,
+        )
     typer.echo(report.render())
 
 

@@ -12,6 +12,12 @@ that says otherwise gets argued with instead of acted on.
 
 Everything is built from rows. Nothing here touches a machine, so a report can
 be run for last Tuesday.
+
+OEE is on the bottom of the report and not in the machine table, because it is
+one number per site and putting it beside each machine invites somebody to
+compare a coder on a bottling line against one on a case packer. Working it out
+needs a rated speed, which the report does not know and takes as an argument,
+and without one the OEE block is simply left off rather than guessed at.
 """
 
 from __future__ import annotations
@@ -23,6 +29,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from nozzlewright.errors import NozzlewrightError
+from nozzlewright.fleet.oee import SiteOee, oee_for, site_oee
 from nozzlewright.storage.models import AlarmRecord, JobRun, PollSample, Printer
 from nozzlewright.storage.repo import AlarmRepo, JobRepo, PrinterRepo, SampleRepo
 
@@ -80,6 +87,7 @@ class ShiftReport:
     start: datetime
     end: datetime
     machines: tuple[MachineLine, ...] = field(default_factory=tuple)
+    effectiveness: SiteOee | None = None
 
     @property
     def duration(self) -> timedelta:
@@ -137,11 +145,33 @@ class ShiftReport:
             "site: %d coded, %d runs, %d short, %.1f%% up"
             % (self.printed, self.runs, self.short_runs, self.availability * 100)
         )
+        if self.effectiveness is not None:
+            lines.append(self.effectiveness.oee.render())
+            worst = self.effectiveness.worst()
+            if worst:
+                lines.append(
+                    "worst: %s at %.1f%%, held back by %s"
+                    % (worst[0].printer_id, worst[0].oee.overall * 100, worst[0].oee.worst_factor)
+                )
         return "\n".join(lines)
 
 
-def build_report(session: Session, site_id: str, start: datetime, end: datetime) -> ShiftReport:
-    """Build a report over one window."""
+def build_report(
+    session: Session,
+    site_id: str,
+    start: datetime,
+    end: datetime,
+    *,
+    poll_interval_s: float = 0.0,
+    rated_per_minute: float = 0.0,
+) -> ShiftReport:
+    """Build a report over one window.
+
+    Pass both a poll interval and a rated line speed to get the OEE block. One
+    without the other is not enough: the interval turns readings into minutes
+    and the rating turns minutes into product, and guessing at either produces
+    a percentage somebody will quote.
+    """
     if end <= start:
         raise NozzlewrightError("a report window has to end after it starts")
 
@@ -163,7 +193,32 @@ def build_report(session: Session, site_id: str, start: datetime, end: datetime)
         ]
         raised.extend(row for row in alarms.active(printer.printer_id) if row.raised_at <= end)
         lines.append(_line_for(printer, window, runs, raised))
-    return ShiftReport(site_id=site_id, start=start, end=end, machines=tuple(lines))
+
+    effectiveness = None
+    if poll_interval_s > 0 and rated_per_minute > 0:
+        effectiveness = site_oee(
+            start,
+            end,
+            [
+                oee_for(
+                    line.printer_id,
+                    samples=line.samples,
+                    reachable=line.reachable,
+                    printing=line.printing,
+                    printed=line.printed,
+                    poll_interval_s=poll_interval_s,
+                    rated_per_minute=rated_per_minute,
+                )
+                for line in lines
+            ],
+        )
+    return ShiftReport(
+        site_id=site_id,
+        start=start,
+        end=end,
+        machines=tuple(lines),
+        effectiveness=effectiveness,
+    )
 
 
 def _inside(run: JobRun, start: datetime, end: datetime) -> bool:
