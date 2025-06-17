@@ -24,6 +24,7 @@ from nozzlewright.printer.geometry import NOZZLES_PER_ROW
 from nozzlewright.printer.snapshot import render_config_table
 from nozzlewright.printer.status import Alarm, MachineState
 from nozzlewright.protocol.catalogue import CommandSpec, lookup
+from nozzlewright.protocol.codec import unescape_argument
 from nozzlewright.protocol.framing import encode_frame, strip_checksum
 from nozzlewright.protocol.status import Status
 from nozzlewright.simulator.settings_store import BadArgument, apply_setting
@@ -71,6 +72,8 @@ class SimulatedPrinter:
     wipes: int = 3
     faults: int = 2
     starts: int = 0
+    #: Chunks of a label that has not finished arriving, keyed by label name.
+    partial_labels: dict[str, dict[int, str]] = field(default_factory=dict)
     #: Nozzles not firing, keyed by pen and row. A purge clears these.
     blocked_nozzles: dict[tuple[int, int], tuple[int, ...]] = field(default_factory=dict)
     #: Nozzles whose resistor has gone. Nothing brings these back.
@@ -262,6 +265,49 @@ class SimulatedPrinter:
         return int(Status.OK), args[0]
 
     # Configuration
+
+    def _do_labelput(self, args: list[str]) -> tuple[int, str]:
+        """Take one chunk of a label. The last one commits it.
+
+        Chunks are held aside until the whole message has arrived, so a
+        transfer that stops half way leaves the machine holding whatever it had
+        before rather than half a label. A real controller does the same thing
+        and for the same reason: an operator selecting a truncated label at two
+        in the morning is worse than an operator finding it missing.
+        """
+        if len(args) != 4:
+            return int(Status.BAD_PARAM), ""
+        name, raw_chunk, raw_total, payload = args
+        try:
+            chunk, total = int(raw_chunk), int(raw_total)
+        except ValueError:
+            return int(Status.BAD_PARAM), ""
+        if not 0 <= chunk < total:
+            return int(Status.BAD_PARAM), ""
+
+        held = self.partial_labels.setdefault(name, {})
+        if chunk == 0:
+            held.clear()
+        held[chunk] = payload
+        if len(held) < total:
+            return int(Status.OK), "HELD=%d" % len(held)
+
+        self.labels[name] = unescape_argument("".join(held[index] for index in sorted(held)))
+        del self.partial_labels[name]
+        return int(Status.OK), "STORED=%s" % name
+
+    def _do_labeldel(self, args: list[str]) -> tuple[int, str]:
+        """Remove a label. Refuses the one that is selected."""
+        if len(args) != 1:
+            return int(Status.BAD_PARAM), ""
+        name = args[0]
+        if name not in self.labels:
+            return int(Status.NOT_FOUND), ""
+        if name == self.active_label:
+            return int(Status.CONFIG_LOCKED), ""
+        del self.labels[name]
+        self.partial_labels.pop(name, None)
+        return int(Status.OK), name
 
     def _do_config(self, args: list[str]) -> tuple[int, str]:
         if self.config is None:

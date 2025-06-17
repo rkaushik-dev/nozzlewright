@@ -21,12 +21,18 @@ from nozzlewright.printer.ink import InkReading, parse_ink_rows
 from nozzlewright.printer.nozzles import Advice, HeadHealth, parse_nozzle_test
 from nozzlewright.printer.snapshot import parse_config_table
 from nozzlewright.printer.status import MachineState, PrinterStatus, parse_status
+from nozzlewright.protocol.codec import escape_argument
+from nozzlewright.protocol.status import Status
 from nozzlewright.session.supervisor import PrinterSession
 from nozzlewright.telemetry.logging import get_logger
 
 __all__ = [
+    "LABEL_CHUNK_BYTES",
+    "MAX_LABEL_CHUNKS",
     "ApplyReport",
     "apply_config",
+    "delete_label",
+    "push_label",
     "read_config",
     "read_ink",
     "read_nozzles",
@@ -35,6 +41,13 @@ __all__ = [
 ]
 
 _log = get_logger("nozzlewright.operations")
+
+#: How much label source goes in one frame. The frame limit is four
+#: kilobytes and the verb, the name and the counters take some of it.
+LABEL_CHUNK_BYTES = 1024
+
+#: The chunk counter is one byte on the wire.
+MAX_LABEL_CHUNKS = 256
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +154,56 @@ async def recover_head(
     if not retest:
         return before, None
     return before, await read_nozzles(session, pen)
+
+
+async def push_label(
+    session: PrinterSession, name: str, source: str, *, chunk_bytes: int = LABEL_CHUNK_BYTES
+) -> int:
+    """Send one label to a machine, in chunks, and say how many it took.
+
+    The frame limit is four kilobytes and a label with a lot of elements gets
+    close to it, so this splits rather than hoping. Chunks go one at a time and
+    in order, which the channel underneath guarantees, and the machine only
+    commits the label when the last one lands.
+
+    Splitting is on bytes and not on lines. A label whose source has one very
+    long line is unusual and legal, and a splitter that assumed lines would
+    silently produce a frame the machine drops.
+    """
+    if not name.strip():
+        raise ConfigError("label", name, "a label needs a name")
+    if not source.strip():
+        raise ConfigError("label", name, "has no source to send")
+
+    dialect = session.dialect
+    if dialect is not None and not dialect.supports("LABELPUT"):
+        raise ConfigError("session", session.printer_id, "this machine cannot be sent labels")
+
+    body = escape_argument(source)
+    chunks = [body[at : at + chunk_bytes] for at in range(0, len(body), chunk_bytes)]
+    if len(chunks) > MAX_LABEL_CHUNKS:
+        raise ConfigError(
+            "label",
+            name,
+            "is %d chunks and the protocol carries %d" % (len(chunks), MAX_LABEL_CHUNKS),
+        )
+
+    for index, chunk in enumerate(chunks):
+        await session.command("LABELPUT", name, index, len(chunks), chunk)
+    _log.info("label sent", printer=session.printer_id, label=name, chunks=len(chunks))
+    return len(chunks)
+
+
+async def delete_label(session: PrinterSession, name: str) -> bool:
+    """Remove a label from a machine. Says False when it was not there."""
+    try:
+        await session.command("LABELDEL", name)
+    except CommandRejected as error:
+        if error.status == int(Status.NOT_FOUND):
+            return False
+        raise
+    _log.info("label deleted", printer=session.printer_id, label=name)
+    return True
 
 
 async def apply_config(

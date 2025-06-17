@@ -26,18 +26,64 @@ from nozzlewright.protocol.status import Status
 
 __all__ = [
     "ARG_SEPARATOR",
+    "ESCAPED_COMMA",
+    "ESCAPED_NEWLINE",
+    "ESCAPED_ROW",
     "ROW_SEPARATOR",
     "Request",
     "Response",
     "build_request",
+    "escape_argument",
     "parse_record",
     "parse_response",
     "parse_table",
+    "unescape_argument",
 ]
 
 ARG_SEPARATOR = ","
 ROW_SEPARATOR = ";"
 FIELD_SEPARATOR = "="
+
+#: What a comma inside an argument is carried as.
+ESCAPED_COMMA = "\x1f"
+
+#: What a semicolon is carried as.
+ESCAPED_ROW = "\x1e"
+
+#: What a line ending is carried as.
+ESCAPED_NEWLINE = "\x1d"
+
+#: The substitution table, in the order it is applied.
+#:
+#: The protocol has no quoting and no backslash escapes, so text carrying a
+#: separator or a line ending cannot go on the wire as it stands. The three
+#: ASCII separator control characters are the choice because no label source
+#: has ever held one, and because both ends agree on them without needing a
+#: length prefix. A carriage return is folded into the newline rather than
+#: given its own code: a label that came off a Windows editor and one that did
+#: not have to arrive at the machine as the same label.
+_SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
+    ("\r\n", ESCAPED_NEWLINE),
+    ("\r", ESCAPED_NEWLINE),
+    ("\n", ESCAPED_NEWLINE),
+    (ARG_SEPARATOR, ESCAPED_COMMA),
+    (ROW_SEPARATOR, ESCAPED_ROW),
+)
+
+
+def escape_argument(text: str) -> str:
+    """Hide the separators and line endings inside one argument."""
+    for plain, hidden in _SUBSTITUTIONS:
+        text = text.replace(plain, hidden)
+    return text
+
+
+def unescape_argument(text: str) -> str:
+    """Put them back. Every line ending comes back as a bare newline."""
+    text = text.replace(ESCAPED_ROW, ROW_SEPARATOR)
+    text = text.replace(ESCAPED_COMMA, ARG_SEPARATOR)
+    return text.replace(ESCAPED_NEWLINE, "\n")
+
 
 _TRUE_WORDS = frozenset({"1", "on", "yes", "true", "enabled"})
 _FALSE_WORDS = frozenset({"0", "off", "no", "false", "disabled"})
