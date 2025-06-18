@@ -26,10 +26,13 @@ import typer
 from nozzlewright.cli.context import Context
 from nozzlewright.cli.output import emit, fail
 from nozzlewright.errors import NozzlewrightError
+from nozzlewright.fleet.distribute import Distribution, distribute
 from nozzlewright.fleet.export import write_alarms, write_jobs, write_samples
 from nozzlewright.fleet.report import build_report
 from nozzlewright.fleet.shifts import DEFAULT_PATTERN, shift_at, spans_for_day
 from nozzlewright.labels.fields import ShiftWindow
+from nozzlewright.labels.store import LabelStore
+from nozzlewright.session.pool import SessionPool
 from nozzlewright.storage.engine import build_engine, build_sessionmaker, session_scope
 from nozzlewright.storage.repo import AlarmRepo, JobRepo, PrinterRepo
 
@@ -221,6 +224,53 @@ def fleet_report(
             rated_per_minute=rated,
         )
     typer.echo(report.render())
+
+
+@fleet_app.command("push")
+def fleet_push(
+    ctx: typer.Context,
+    line: str = typer.Option("", help="Only machines on this line."),
+    printer_id: list[str] = typer.Option([], "--printer", help="Only these machines."),
+    label: list[str] = typer.Option([], "--label", help="Only these labels."),
+    prune: bool = typer.Option(False, "--prune", help="Also take off what the store has not got."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Say what would move and move nothing."),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """Bring every machine in line with the site label store.
+
+    Exits one if any machine ended up not matching, so a commissioning script
+    can stop rather than carry on to the next line.
+    """
+    from nozzlewright.cli.main import run
+
+    context = _context(ctx)
+    registry = context.load_registry()
+    if printer_id:
+        targets = tuple(
+            record.printer_id for record in registry.all() if record.printer_id in printer_id
+        )
+    elif line:
+        targets = tuple(record.printer_id for record in registry.on_line(line))
+    else:
+        targets = tuple(record.printer_id for record in registry.enabled())
+    if not targets:
+        raise fail("that matches no machine on this site")
+
+    store = LabelStore(context.state_dir / "labels")  # type: ignore[operator]
+    store.open()
+    pool = SessionPool(factory=context.session_for)
+
+    async def work() -> Distribution:
+        try:
+            return await distribute(pool, store, targets, only=label, prune=prune, dry_run=dry_run)
+        finally:
+            await pool.close()
+
+    outcome = run(work())
+    emit([machine.as_dict() for machine in outcome.machines], as_json)
+    typer.echo(outcome.summary())
+    if not outcome.ok:
+        raise typer.Exit(code=1)
 
 
 @fleet_app.command("export")
