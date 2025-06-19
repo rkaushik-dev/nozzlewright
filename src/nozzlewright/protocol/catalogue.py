@@ -121,6 +121,18 @@ _SESSION: tuple[CommandSpec, ...] = (
     _spec("VERSION", LEVEL_OPERATOR, ReplyShape.RECORD),
     _spec("STATUS", LEVEL_OPERATOR, ReplyShape.RECORD),
     _spec("STATISTICS", LEVEL_OPERATOR, ReplyShape.TABLE),
+    _spec("GETTIME", LEVEL_OPERATOR, ReplyShape.RECORD),
+    _spec(
+        "SETTIME",
+        LEVEL_SUPERVISOR,
+        ReplyShape.SCALAR,
+        ArgSpec("year", ArgKind.INT, low=2000, high=2099),
+        ArgSpec("month", ArgKind.INT, low=1, high=12),
+        ArgSpec("day", ArgKind.INT, low=1, high=31),
+        ArgSpec("hour", ArgKind.INT, low=0, high=23),
+        ArgSpec("minute", ArgKind.INT, low=0, high=59),
+        ArgSpec("second", ArgKind.INT, low=0, high=59),
+    ),
     _spec("MINMAX", LEVEL_OPERATOR, ReplyShape.TABLE),
     # Bulk configuration read. Forty round trips over a radio is a minute of an
     # operator standing still, so revision 2 dumps the whole thing at once.

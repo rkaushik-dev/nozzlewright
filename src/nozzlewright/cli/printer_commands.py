@@ -8,20 +8,24 @@ the technician has walked away is a laptop that stops the next person connecting
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 
 import typer
 
 from nozzlewright.cli.context import Context
 from nozzlewright.cli.output import emit, fail
+from nozzlewright.printer.clock import ClockReading
 from nozzlewright.printer.nozzles import Advice, HeadHealth
 from nozzlewright.printer.operations import (
     apply_config,
+    read_clock,
     read_config,
     read_ink,
     read_nozzles,
     read_status,
     recover_head,
+    set_clock,
 )
 from nozzlewright.printer.snapshot import parse_config_table, render_config_table
 from nozzlewright.protocol.codec import parse_table
@@ -87,6 +91,36 @@ def printer_ink(
         ]
 
     emit(run(work()), as_json)
+
+
+@printer_app.command("clock")
+def printer_clock(
+    ctx: typer.Context,
+    printer_id: str = typer.Argument(...),
+    set_it: bool = typer.Option(False, "--set", help="Set the clock from this machine."),
+    tolerance_s: float = typer.Option(120.0, help="Drift past this is reported as a problem."),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """Read the machine clock, and set it when asked.
+
+    Exits one when the clock is out of tolerance and was not set, so a nightly
+    check can page somebody rather than print into a log nobody reads.
+    """
+    from nozzlewright.cli.main import run
+
+    context = _context(ctx)
+
+    async def work() -> ClockReading:
+        async with context.connected(printer_id) as session:
+            if set_it:
+                return await set_clock(session)
+            return await read_clock(session)
+
+    reading = run(work())
+    emit(reading.as_dict(), as_json)
+    if reading.out_of_tolerance(timedelta(seconds=tolerance_s)):
+        typer.secho(reading.summary(), fg=typer.colors.YELLOW, err=True)
+        raise typer.Exit(code=1)
 
 
 @printer_app.command("nozzles")

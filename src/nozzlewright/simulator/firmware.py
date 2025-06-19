@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 
 from nozzlewright.printer.config import PrinterConfig
 from nozzlewright.printer.geometry import NOZZLES_PER_ROW
@@ -72,6 +73,8 @@ class SimulatedPrinter:
     wipes: int = 3
     faults: int = 2
     starts: int = 0
+    #: How far the machine clock is from ours. A flat battery is a big one.
+    clock_offset: timedelta = timedelta(0)
     #: Chunks of a label that has not finished arriving, keyed by label name.
     partial_labels: dict[str, dict[int, str]] = field(default_factory=dict)
     #: Nozzles not firing, keyed by pen and row. A purge clears these.
@@ -265,6 +268,30 @@ class SimulatedPrinter:
         return int(Status.OK), args[0]
 
     # Configuration
+
+    def _do_gettime(self, args: list[str]) -> tuple[int, str]:
+        """What the machine thinks the time is, drift included."""
+        now = datetime.now() + self.clock_offset
+        return int(Status.OK), "YEAR=%d,MONTH=%d,DAY=%d,HOUR=%d,MIN=%d,SEC=%d" % (
+            now.year,
+            now.month,
+            now.day,
+            now.hour,
+            now.minute,
+            now.second,
+        )
+
+    def _do_settime(self, args: list[str]) -> tuple[int, str]:
+        """Take a time and remember how far it is from ours."""
+        if len(args) != 6:
+            return int(Status.BAD_PARAM), ""
+        try:
+            year, month, day, hour, minute, second = (int(part) for part in args)
+            wanted = datetime(year, month, day, hour, minute, second)
+        except ValueError:
+            return int(Status.BAD_PARAM), ""
+        self.clock_offset = wanted.replace(microsecond=0) - datetime.now().replace(microsecond=0)
+        return int(Status.OK), "OK"
 
     def _do_labelput(self, args: list[str]) -> tuple[int, str]:
         """Take one chunk of a label. The last one commits it.

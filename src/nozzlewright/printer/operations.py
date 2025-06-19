@@ -13,9 +13,11 @@ is left in a state that is neither the old one nor the new one.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime
 
 from nozzlewright.errors import CommandRejected, ConfigError, PrinterBusy
+from nozzlewright.printer.clock import ClockReading, format_set_args, parse_clock
 from nozzlewright.printer.config import ConfigDiff, PrinterConfig
 from nozzlewright.printer.ink import InkReading, parse_ink_rows
 from nozzlewright.printer.nozzles import Advice, HeadHealth, parse_nozzle_test
@@ -33,11 +35,13 @@ __all__ = [
     "apply_config",
     "delete_label",
     "push_label",
+    "read_clock",
     "read_config",
     "read_ink",
     "read_nozzles",
     "read_status",
     "recover_head",
+    "set_clock",
 ]
 
 _log = get_logger("nozzlewright.operations")
@@ -154,6 +158,35 @@ async def recover_head(
     if not retest:
         return before, None
     return before, await read_nozzles(session, pen)
+
+
+async def read_clock(session: PrinterSession, now: datetime | None = None) -> ClockReading:
+    """Read the machine clock and work out the drift.
+
+    The local time is taken twice, either side of the command, and the midpoint
+    is what the machine time is compared against. On a fast link the two are the
+    same to a millisecond and it costs nothing; on a slow radio it is the
+    difference between a real reading and a second of imaginary drift.
+    """
+    before = now or datetime.now()
+    response = await session.command("GETTIME")
+    after = now or datetime.now()
+    middle = before + (after - before) / 2
+    reading = parse_clock(session.printer_id, response.record(), middle)
+    return replace(reading, round_trip=after - before)
+
+
+async def set_clock(session: PrinterSession, when: datetime | None = None) -> ClockReading:
+    """Set the machine clock from local time and read it back.
+
+    Reading back is the point. A SETTIME that the firmware accepted and then
+    quietly rounded, or applied to the wrong field, looks exactly like one that
+    worked, and the only way to tell is to ask.
+    """
+    moment = when or datetime.now()
+    await session.command("SETTIME", *format_set_args(moment))
+    _log.info("clock set", printer=session.printer_id, at=moment.isoformat(sep=" "))
+    return await read_clock(session)
 
 
 async def push_label(
