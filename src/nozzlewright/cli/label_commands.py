@@ -33,7 +33,7 @@ from nozzlewright.labels.store import LabelStore
 from nozzlewright.labels.writer import render_label_source
 from nozzlewright.printer.cartridge import CartridgeSpec, InkFamily
 
-__all__ = ["DEFAULT_SHIFTS", "default_fonts", "label_app"]
+__all__ = ["DEFAULT_SHIFTS", "default_fonts", "label_app", "when_or_now"]
 
 label_app = typer.Typer(help="Work on labels without a machine.")
 
@@ -65,7 +65,7 @@ def _store(ctx: typer.Context) -> LabelStore:
     return store
 
 
-def _when(at: str) -> datetime:
+def when_or_now(at: str) -> datetime:
     """Parse the time a proof is rendered at."""
     if not at:
         return datetime.now()
@@ -116,7 +116,7 @@ def label_proof(
     """Draw a label as it would print."""
     template = parse_label(source.read_text(encoding="utf-8"))
     context = FieldContext(
-        now=_when(at),
+        now=when_or_now(at),
         counters={item.name: counter for item in template.fields},
         prompts=_prompts(answer),
         shifts=DEFAULT_SHIFTS,
@@ -154,7 +154,7 @@ def label_cost(
 
     template = parse_label(source.read_text(encoding="utf-8"))
     field_context = FieldContext(
-        now=_when(at),
+        now=when_or_now(at),
         counters={item.name: counter for item in template.fields},
         prompts={item.name: "X" * 4 for item in template.interactive_fields()},
         shifts=context.site.shifts or DEFAULT_SHIFTS,

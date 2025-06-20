@@ -14,8 +14,14 @@ from pathlib import Path
 import typer
 
 from nozzlewright.cli.context import Context
+from nozzlewright.cli.label_commands import DEFAULT_SHIFTS, default_fonts, when_or_now
 from nozzlewright.cli.output import emit, fail
+from nozzlewright.labels.fields import FieldContext
+from nozzlewright.labels.raster import render_label
+from nozzlewright.labels.store import LabelStore
+from nozzlewright.labels.verify import verify_print
 from nozzlewright.printer.clock import ClockReading
+from nozzlewright.printer.geometry import HeadGeometry
 from nozzlewright.printer.nozzles import Advice, HeadHealth
 from nozzlewright.printer.operations import (
     apply_config,
@@ -144,6 +150,58 @@ def printer_nozzles(
         typer.echo("the machine reported no nozzle rows")
         return
     emit(rows, as_json)
+
+
+@printer_app.command("verify")
+def printer_verify(
+    ctx: typer.Context,
+    printer_id: str = typer.Argument(...),
+    label: str = typer.Argument("", help="A label in the site store. Empty means the one loaded."),
+    at: str = typer.Option("", help="Render as if it were this date and time."),
+    counter: int = typer.Option(1, help="Value to render counters at."),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """Run a nozzle test and say whether the message will still scan.
+
+    Exits one when the message would come out unreadable, so a start of shift
+    check can stop a line before the first pallet rather than after it.
+    """
+    from nozzlewright.cli.main import run
+
+    context = _context(ctx)
+    store = LabelStore(context.state_dir / "labels")  # type: ignore[operator]
+    store.open()
+
+    async def work() -> tuple[HeadHealth, str, HeadGeometry]:
+        async with context.connected(printer_id) as session:
+            health = await read_nozzles(session)
+            head = (await read_config(session)).head
+            wanted = label
+            if not wanted:
+                wanted = (await read_status(session)).active_label
+        return health, wanted, head
+
+    health, wanted, head = run(work())
+    if not wanted:
+        raise fail("that machine has no label loaded, name one")
+    if not store.has(wanted):
+        raise fail("the store has no label called %s" % wanted)
+
+    template = store.load(wanted)
+    fonts = default_fonts()
+    resolved = template.resolve(
+        FieldContext(
+            now=when_or_now(at),
+            counters={item.name: counter for item in template.fields},
+            prompts={item.name: "X" * 4 for item in template.interactive_fields()},
+            shifts=context.site.shifts or DEFAULT_SHIFTS,
+        )
+    )
+    result = verify_print(resolved, render_label(resolved, fonts), health, head, fonts)
+    emit(result.as_dict(), as_json)
+    if not result.printable:
+        typer.secho(result.summary(), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
 
 
 @printer_app.command("recover")
