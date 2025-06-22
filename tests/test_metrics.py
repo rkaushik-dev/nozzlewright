@@ -159,3 +159,81 @@ def test_the_content_type_is_the_prometheus_one() -> None:
 
 def test_an_unknown_sample_is_none() -> None:
     assert Metrics(site_id="bench").value("nzw_nothing", "line4") is None
+
+
+def test_the_notifier_counters_start_at_nothing() -> None:
+    metrics = Metrics(site_id="bench")
+    metrics.observe_notifier({"sent": 0, "failed": 0, "suppressed": 0})
+    assert site_value(metrics, "nzw_notices_total") == 0.0
+    assert site_value(metrics, "nzw_notice_failures_total") == 0.0
+
+
+def test_the_notifier_counters_follow_the_total() -> None:
+    metrics = Metrics(site_id="bench")
+    metrics.observe_notifier({"sent": 3, "failed": 1, "suppressed": 9})
+    metrics.observe_notifier({"sent": 5, "failed": 1, "suppressed": 20})
+    assert site_value(metrics, "nzw_notices_total") == 5.0
+    assert site_value(metrics, "nzw_notice_failures_total") == 1.0
+
+
+def test_a_counter_never_goes_backwards() -> None:
+    metrics = Metrics(site_id="bench")
+    metrics.observe_notifier({"sent": 5, "failed": 0})
+    metrics.observe_notifier({"sent": 2, "failed": 0})
+    assert site_value(metrics, "nzw_notices_total") == 5.0
+
+
+def test_the_swept_rows_are_split_by_table() -> None:
+    metrics = Metrics(site_id="bench")
+    metrics.observe_sweep({"samples": 400, "alarms": 2, "runs": 0, "audit": 0})
+    assert (
+        metrics.registry.get_sample_value(
+            "nzw_rows_swept_total", {"site": "bench", "table": "samples"}
+        )
+        == 400.0
+    )
+    assert (
+        metrics.registry.get_sample_value(
+            "nzw_rows_swept_total", {"site": "bench", "table": "runs"}
+        )
+        == 0.0
+    )
+
+
+def test_the_database_size_is_a_gauge() -> None:
+    metrics = Metrics(site_id="bench")
+    metrics.observe_sweep({}, database_bytes=122880)
+    metrics.observe_sweep({}, database_bytes=61440)
+    assert site_value(metrics, "nzw_database_bytes") == 61440.0
+
+
+def test_no_size_leaves_the_gauge_alone() -> None:
+    metrics = Metrics(site_id="bench")
+    metrics.observe_sweep({}, database_bytes=122880)
+    metrics.observe_sweep({})
+    assert site_value(metrics, "nzw_database_bytes") == 122880.0
+
+
+def test_the_pool_counters() -> None:
+    metrics = Metrics(site_id="bench")
+    metrics.observe_pool({"live": 2, "opened": 7, "reused": 40, "closed": 5})
+    assert site_value(metrics, "nzw_links_live") == 2.0
+    assert site_value(metrics, "nzw_links_opened_total") == 7.0
+    metrics.observe_pool({"live": 0, "opened": 9})
+    assert site_value(metrics, "nzw_links_live") == 0.0
+    assert site_value(metrics, "nzw_links_opened_total") == 9.0
+
+
+def test_the_new_series_render() -> None:
+    metrics = Metrics(site_id="bench")
+    metrics.observe_notifier({"sent": 1, "failed": 0})
+    metrics.observe_sweep({"samples": 1}, database_bytes=4096)
+    metrics.observe_pool({"live": 1, "opened": 1})
+    text = metrics.render().decode("utf-8")
+    for name in ("nzw_notices_total", "nzw_rows_swept_total", "nzw_links_live"):
+        assert name in text
+
+
+def site_value(metrics: Metrics, name: str) -> float | None:
+    """One site wide sample by name."""
+    return metrics.registry.get_sample_value(name, {"site": metrics.site_id})

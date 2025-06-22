@@ -100,6 +100,43 @@ class Metrics:
             ["site", "printer", "verb"],
             registry=self.registry,
         )
+        site_only = ["site"]
+        self.notices = Counter(
+            "nzw_notices_total",
+            "Alarm notices delivered to at least one sink.",
+            site_only,
+            registry=self.registry,
+        )
+        self.notice_failures = Counter(
+            "nzw_notice_failures_total",
+            "Alarm notices a sink could not carry.",
+            site_only,
+            registry=self.registry,
+        )
+        self.rows_swept = Counter(
+            "nzw_rows_swept_total",
+            "Rows the janitor has deleted, by table.",
+            ["site", "table"],
+            registry=self.registry,
+        )
+        self.database_bytes = Gauge(
+            "nzw_database_bytes",
+            "How big the site database file is.",
+            site_only,
+            registry=self.registry,
+        )
+        self.links_live = Gauge(
+            "nzw_links_live",
+            "Machines with a session open right now.",
+            site_only,
+            registry=self.registry,
+        )
+        self.links_opened = Counter(
+            "nzw_links_opened_total",
+            "Sessions the pool has brought up.",
+            site_only,
+            registry=self.registry,
+        )
 
     def observe(self, result: PollResult) -> None:
         """Fold one reading in. This is the poller hook shape, minus the await."""
@@ -133,6 +170,43 @@ class Metrics:
         self.commands.labels(**tags).inc()
         if failed:
             self.command_failures.labels(**tags).inc()
+
+    def observe_notifier(self, stats: dict[str, int]) -> None:
+        """Fold in the notifier counters.
+
+        Counters are set from a total rather than incremented, because the
+        notifier keeps its own running count and the two would drift the first
+        time a scrape was missed. Prometheus counters can be set as long as
+        they only go up, and these only go up.
+        """
+        self._set_counter(self.notices.labels(site=self.site_id), stats.get("sent", 0))
+        self._set_counter(self.notice_failures.labels(site=self.site_id), stats.get("failed", 0))
+
+    def observe_sweep(self, totals: dict[str, int], database_bytes: int = 0) -> None:
+        """Fold in what the janitor has deleted, and how big the file is."""
+        for table in ("samples", "alarms", "runs", "audit"):
+            counter = self.rows_swept.labels(site=self.site_id, table=table)
+            self._set_counter(counter, totals.get(table, 0))
+        if database_bytes:
+            self.database_bytes.labels(site=self.site_id).set(database_bytes)
+
+    def observe_pool(self, stats: dict[str, int]) -> None:
+        """Fold in the session pool counters."""
+        self.links_live.labels(site=self.site_id).set(stats.get("live", 0))
+        self._set_counter(self.links_opened.labels(site=self.site_id), stats.get("opened", 0))
+
+    @staticmethod
+    def _set_counter(counter: object, total: int) -> None:
+        """Bring a counter up to a running total, never down.
+
+        A counter that went backwards would be read as a process restart by
+        every monitoring system there is, and a restart that did not happen is
+        worse than a scrape that is one behind.
+        """
+        current = getattr(counter, "_value", None)
+        seen = current.get() if current is not None else 0.0
+        if total > seen:
+            counter.inc(total - seen)  # type: ignore[attr-defined]
 
     def forget(self, printer_id: str) -> None:
         """Drop the series for a machine that has left the site.

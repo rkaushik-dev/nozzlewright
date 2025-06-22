@@ -185,28 +185,39 @@ class Gateway:
         """Delete everything past its retention, once, right now."""
         if self.janitor is None:
             return SweepResult()
-        return self.janitor.sweep()
+        result = self.janitor.sweep()
+        if self.metrics is not None:
+            pages = self.janitor.page_stats()
+            self.metrics.observe_sweep(self.janitor.total.as_dict(), pages.get("bytes", 0))
+        return result
 
     async def _record(self, result: PollResult) -> None:
-        """Everything that wants to know about one reading."""
+        """Everything that wants to know about one reading.
+
+        The notifier counters are folded in at the end rather than alongside
+        the reading counters, because the notices this reading causes have not
+        gone out yet at the top of the method and a scrape landing in between
+        would be one behind for the whole poll interval.
+        """
         self.stats.observe(result)
         if self.metrics is not None:
             self.metrics.observe(result)
         if self.recorder is None:
             return
         outcome = self.recorder.record(result)
-        if self.notifier is None or not outcome.changes:
-            return
-        line = self.registry.records.get(result.printer_id, _NO_RECORD).line
-        for change in outcome.changes:
-            await self.notifier.announce(
-                change.printer_id,
-                change.name,
-                change.severity,
-                open_now=change.open_now,
-                acknowledged=change.acknowledged,
-                line=line,
-            )
+        if self.notifier is not None and outcome.changes:
+            line = self.registry.records.get(result.printer_id, _NO_RECORD).line
+            for change in outcome.changes:
+                await self.notifier.announce(
+                    change.printer_id,
+                    change.name,
+                    change.severity,
+                    open_now=change.open_now,
+                    acknowledged=change.acknowledged,
+                    line=line,
+                )
+        if self.metrics is not None and self.notifier is not None:
+            self.metrics.observe_notifier(self.notifier.stats.as_dict())
 
     def _build_notifier(self) -> Notifier:
         """Assemble the sinks this gateway was configured with.

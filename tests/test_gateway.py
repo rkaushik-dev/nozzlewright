@@ -315,3 +315,36 @@ class _Catcher:
 
     async def deliver(self, notice: object) -> None:
         self.seen.append(notice)
+
+
+async def test_a_reading_feeds_the_notifier_metrics(tmp_path: Path) -> None:
+    gateway = build(site(tmp_path, "line4"))
+    gateway.prepare()
+    assert gateway.metrics is not None
+    await gateway._record(
+        PollResult(
+            printer_id="line4",
+            at=0.0,
+            duration_s=0.05,
+            status=PrinterStatus(state=MachineState.FAULT, alarms=Alarm.INK_OUT),
+        )
+    )
+    assert gateway.metrics.registry.get_sample_value("nzw_notices_total", {"site": "bench"}) == 1.0
+    gateway._dispose()
+
+
+def test_a_sweep_feeds_the_janitor_metrics(tmp_path: Path) -> None:
+    gateway = build(site(tmp_path, "line4"))
+    gateway.prepare()
+    assert gateway.metrics is not None
+    gateway.sweep()
+    size = gateway.metrics.registry.get_sample_value("nzw_database_bytes", {"site": "bench"})
+    assert size is not None
+    assert size > 0
+    gateway._dispose()
+
+
+def test_a_sweep_before_prepare_touches_no_metrics(tmp_path: Path) -> None:
+    gateway = build(tmp_path)
+    assert gateway.sweep().rows == 0
+    assert gateway.metrics is None
