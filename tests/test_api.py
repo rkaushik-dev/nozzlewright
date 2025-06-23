@@ -301,7 +301,10 @@ async def test_changing_a_label_makes_a_revision(harness: Harness) -> None:
         )
         revisions = await client.get("/labels/carton/revisions")
     assert changed.json()["revision"] == 2
-    assert [item["revision"] for item in revisions.json()] == [1, 2]
+    body = revisions.json()
+    assert [item["revision"] for item in body["items"]] == [1, 2]
+    assert body["total"] == 2
+    assert not body["has_more"]
 
 
 async def test_a_label_whose_name_does_not_match_the_path(harness: Harness) -> None:
@@ -350,7 +353,8 @@ async def test_fleet_alarms_and_acknowledgement(harness: Harness) -> None:
 
     async with client_for(harness) as client:
         listed = await client.get("/fleet/alarms")
-        assert [item["name"] for item in listed.json()] == ["INK_LOW"]
+        assert [item["name"] for item in listed.json()["items"]] == ["INK_LOW"]
+        assert listed.json()["total"] == 1
 
         acked = await client.post("/fleet/alarms/line4/INK_LOW/ack", params={"who": "mueller"})
         assert acked.status_code == 200
@@ -403,3 +407,69 @@ async def test_a_route_without_a_running_poller() -> None:
         assert response.status_code == 503
     finally:
         await bench.stop()
+
+
+async def test_the_alarm_list_pages(harness: Harness) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from nozzlewright.storage.repo import AlarmRepo
+
+    with harness.factory() as session:
+        printer = PrinterRepo(session).require("line4")
+        repo = AlarmRepo(session)
+        for step in range(8):
+            repo.open(
+                printer,
+                "FAULT_%d" % step,
+                "warning",
+                at=datetime(2025, 3, 24, 8, tzinfo=UTC) + timedelta(minutes=step),
+            )
+        session.commit()
+
+    async with client_for(harness) as client:
+        first = await client.get("/fleet/alarms", params={"limit": 3})
+        second = await client.get("/fleet/alarms", params={"limit": 3, "offset": 6})
+    assert len(first.json()["items"]) == 3
+    assert first.json()["total"] == 8
+    assert first.json()["has_more"]
+    assert len(second.json()["items"]) == 2
+    assert not second.json()["has_more"]
+
+
+async def test_the_alarm_list_can_be_narrowed_to_one_machine(harness: Harness) -> None:
+    from datetime import UTC, datetime
+
+    from nozzlewright.storage.repo import AlarmRepo
+
+    with harness.factory() as session:
+        printer = PrinterRepo(session).require("line4")
+        AlarmRepo(session).open(
+            printer, "INK_LOW", "warning", at=datetime(2025, 3, 24, 8, tzinfo=UTC)
+        )
+        session.commit()
+
+    async with client_for(harness) as client:
+        mine = await client.get("/fleet/alarms", params={"printer_id": "line4"})
+        other = await client.get("/fleet/alarms", params={"printer_id": "line9"})
+    assert mine.json()["total"] == 1
+    assert other.json()["items"] == []
+
+
+async def test_the_revision_list_pages(harness: Harness) -> None:
+    async with client_for(harness) as client:
+        for step in range(5):
+            await client.put(
+                "/labels/carton", json={"source": CARTON.replace("HALVEX", "BRAND%d" % step)}
+            )
+        page = await client.get("/labels/carton/revisions", params={"limit": 2, "offset": 2})
+    assert [item["revision"] for item in page.json()["items"]] == [3, 4]
+    assert page.json()["total"] == 5
+    assert page.json()["has_more"]
+
+
+async def test_a_revision_page_past_the_end(harness: Harness) -> None:
+    async with client_for(harness) as client:
+        await client.put("/labels/carton", json={"source": CARTON})
+        page = await client.get("/labels/carton/revisions", params={"offset": 50})
+    assert page.json()["items"] == []
+    assert page.json()["total"] == 1

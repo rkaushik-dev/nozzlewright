@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from nozzlewright.api.deps import get_session, require_key
+from nozzlewright.api.paging import Page, PageParams, page_params
 from nozzlewright.api.schemas import DiffOut, LabelIn, LabelOut
 from nozzlewright.labels.diff import diff_labels
 from nozzlewright.labels.parser import parse_label
@@ -44,15 +45,29 @@ def get_label(name: str, session: Session = Depends(get_session)) -> LabelOut:
     return LabelOut.from_row(latest, with_source=True)
 
 
-@router.get("/{name}/revisions", response_model=list[LabelOut])
-def list_revisions(name: str, session: Session = Depends(get_session)) -> list[LabelOut]:
-    """Every revision of one label, oldest first."""
+class RevisionPage(Page[LabelOut]):
+    """A page of label revisions."""
+
+
+@router.get("/{name}/revisions", response_model=RevisionPage)
+def list_revisions(
+    name: str,
+    paging: PageParams = Depends(page_params),
+    session: Session = Depends(get_session),
+) -> RevisionPage:
+    """Every revision of one label, oldest first.
+
+    Paged because this one grows for ever. A label somebody edits every week
+    for three years is a hundred and fifty revisions, all of them carrying
+    their whole source.
+    """
     rows = LabelRepo(session).revisions(name)
     if not rows:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="no label called %s" % name
         )
-    return [LabelOut.from_row(row) for row in rows]
+    page = Page.of_all([LabelOut.from_row(row) for row in rows], paging)
+    return RevisionPage(**page.model_dump())
 
 
 @router.get("/{name}/diff", response_model=DiffOut)

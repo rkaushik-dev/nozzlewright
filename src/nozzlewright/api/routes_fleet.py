@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from nozzlewright import __version__
 from nozzlewright.api.deps import Services, get_services, get_session, require_key
+from nozzlewright.api.paging import Page, PageParams, page_params
 from nozzlewright.api.schemas import AlarmOut, HealthOut, SiteOut, StatusOut
 from nozzlewright.storage.repo import AlarmRepo, PrinterRepo
 
@@ -76,15 +77,29 @@ def fleet_summary(services: Services = Depends(get_services)) -> SiteOut:
     )
 
 
-@router.get("/fleet/alarms", response_model=list[AlarmOut], dependencies=[Depends(require_key)])
+class AlarmPage(Page[AlarmOut]):
+    """A page of open alarms."""
+
+
+@router.get("/fleet/alarms", response_model=AlarmPage, dependencies=[Depends(require_key)])
 def fleet_alarms(
-    printer_id: str | None = None, session: Session = Depends(get_session)
-) -> list[AlarmOut]:
-    """Every alarm still up, newest first."""
+    printer_id: str | None = None,
+    paging: PageParams = Depends(page_params),
+    session: Session = Depends(get_session),
+) -> AlarmPage:
+    """Every alarm still up, newest first.
+
+    Paged, unlike the machine list. A site has a fixed handful of machines and
+    an unbounded number of things that can be wrong with them, and the day this
+    endpoint matters most is the day a switch went down and every machine on
+    the site raised unreachable at once.
+    """
     rows = AlarmRepo(session).active(printer_id)
-    repo = PrinterRepo(session)
-    by_pk = {row.id: row.printer_id for row in repo.all()}
-    return [AlarmOut.from_row(by_pk.get(row.printer_pk, ""), row) for row in rows]
+    by_pk = {row.id: row.printer_id for row in PrinterRepo(session).all()}
+    page = Page.of_all(
+        [AlarmOut.from_row(by_pk.get(row.printer_pk, ""), row) for row in rows], paging
+    )
+    return AlarmPage(**page.model_dump())
 
 
 @router.post(
