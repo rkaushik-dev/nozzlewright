@@ -34,7 +34,10 @@ from nozzlewright.printer.operations import (
     set_clock,
 )
 from nozzlewright.printer.snapshot import parse_config_table, render_config_table
+from nozzlewright.protocol.catalogue import CATALOGUE
 from nozzlewright.protocol.codec import parse_table
+from nozzlewright.protocol.coverage import supports_verb
+from nozzlewright.protocol.dialects import Dialect
 
 __all__ = ["printer_app"]
 
@@ -97,6 +100,49 @@ def printer_ink(
         ]
 
     emit(run(work()), as_json)
+
+
+@printer_app.command("can")
+def printer_can(
+    ctx: typer.Context,
+    printer_id: str = typer.Argument(...),
+    verb: list[str] = typer.Argument(None, help="Verbs to ask about. Empty asks about all."),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """Say what a machine can be asked to do.
+
+    With no verbs it lists only what the machine cannot do, because the list of
+    what it can is four hundred lines and nobody reads it. Exits one when a
+    named verb is missing, so a commissioning script can check before it starts.
+    """
+    from nozzlewright.cli.main import run
+
+    context = _context(ctx)
+
+    async def work() -> tuple[Dialect | None, int]:
+        async with context.connected(printer_id) as session:
+            operator = session.operator
+            return session.dialect, 0 if operator is None else operator.level
+
+    dialect, level = run(work())
+    if dialect is None:
+        raise fail("%s never said what it is" % printer_id)
+
+    wanted = [name.upper() for name in (verb or [])]
+    if wanted:
+        rows = [supports_verb(name, dialect, level).as_dict() for name in wanted]
+    else:
+        rows = [
+            found.as_dict()
+            for found in (supports_verb(name, dialect, level) for name in sorted(CATALOGUE))
+            if not found.ok
+        ]
+        if not rows:
+            typer.echo("%s carries every verb this build knows" % printer_id)
+            return
+    emit(rows, as_json)
+    if any(not row["available"] for row in rows) and wanted:
+        raise typer.Exit(code=1)
 
 
 @printer_app.command("clock")

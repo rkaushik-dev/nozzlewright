@@ -134,3 +134,39 @@ def test_the_worst_element_is_named(tmp_path: Path, bench: SimulatedPrinter) -> 
     body = json.loads(invoke(tmp_path, "printer", "verify", "line4", "carton", "--json").stdout)
     assert body["elements"][0]["name"] == "gtin"
     assert body["elements"][0]["kind"] == "BARCODE"
+
+
+def test_what_a_machine_cannot_do(tmp_path: Path, bench: SimulatedPrinter) -> None:
+    result = invoke(tmp_path, "printer", "can", "line4")
+    assert result.exit_code == 0, result.stderr
+    assert "carries every verb" in result.stdout
+
+
+def test_an_older_firmware_is_missing_some(tmp_path: Path, bench: SimulatedPrinter) -> None:
+    bench.revision = 1
+    body = json.loads(invoke(tmp_path, "printer", "can", "line4", "--json").stdout)
+    verbs = {row["verb"] for row in body}
+    assert "INK2" in verbs
+    assert "STATUS" not in verbs
+    assert all(row["reason"].startswith("needs firmware") for row in body)
+
+
+def test_asking_about_one_verb(tmp_path: Path, bench: SimulatedPrinter) -> None:
+    result = invoke(tmp_path, "printer", "can", "line4", "NOZTEST")
+    assert result.exit_code == 0, result.stderr
+    assert "available=yes" in result.stdout
+
+
+def test_asking_about_a_verb_the_machine_has_not_got(
+    tmp_path: Path, bench: SimulatedPrinter
+) -> None:
+    bench.revision = 1
+    result = invoke(tmp_path, "printer", "can", "line4", "LABELPUT")
+    assert result.exit_code == 1
+    assert "needs firmware revision 2" in result.stdout
+
+
+def test_asking_about_a_verb_in_lower_case(tmp_path: Path, bench: SimulatedPrinter) -> None:
+    body = json.loads(invoke(tmp_path, "printer", "can", "line4", "status", "--json").stdout)
+    assert body[0]["verb"] == "STATUS"
+    assert body[0]["available"]
