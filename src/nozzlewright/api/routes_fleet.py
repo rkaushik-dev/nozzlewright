@@ -8,9 +8,11 @@ radio round trips.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from nozzlewright import __version__
+from nozzlewright.api.board import render_board
 from nozzlewright.api.deps import Services, get_services, get_session, require_key
 from nozzlewright.api.paging import Page, PageParams, page_params
 from nozzlewright.api.schemas import AlarmOut, HealthOut, SiteOut, StatusOut
@@ -37,6 +39,19 @@ def health(
         printers=count,
         database=database,
     )
+
+
+@router.get("/board", response_class=HTMLResponse, include_in_schema=False)
+def wall_board(services: Services = Depends(get_services)) -> HTMLResponse:
+    """The page on the pillar in the packing hall.
+
+    Deliberately not behind the API key. A screen on a wall cannot present a
+    header, the page carries no controls and nothing on it is worth taking, and
+    the alternative is a browser configured with a key in its URL bar where
+    every passing phone can photograph it.
+    """
+    snapshot = {} if services.poller is None else services.poller.snapshot()
+    return HTMLResponse(render_board(services.settings.site_id, snapshot))
 
 
 @router.get("/fleet/status", response_model=list[StatusOut], dependencies=[Depends(require_key)])
