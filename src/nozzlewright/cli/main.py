@@ -20,10 +20,11 @@ from typing import Any, TypeVar
 import typer
 
 from nozzlewright import __version__
+from nozzlewright.api.keys import KeyRing, hash_key, new_key
 from nozzlewright.cli.context import Context
 from nozzlewright.cli.fleet_commands import fleet_app
 from nozzlewright.cli.label_commands import label_app
-from nozzlewright.cli.output import emit
+from nozzlewright.cli.output import emit, fail
 from nozzlewright.cli.printer_commands import printer_app
 from nozzlewright.cli.profile_commands import profile_app
 from nozzlewright.cli.serve_commands import db_app, serve_app
@@ -70,6 +71,52 @@ def root(
     settings = load_settings()
     configure_logging(level=log_level, fmt=settings.log_format)
     ctx.obj = Context(settings=settings, state_dir=state_dir, user=user, pin=pin, simulate=simulate)
+
+
+key_app = typer.Typer(help="Make and hash API keys.")
+
+
+@key_app.command("new")
+def key_new(
+    count: int = typer.Option(1, min=1, max=20, help="How many keys to make."),
+) -> None:
+    """Make a key and print it with the line to put in the site file.
+
+    The key is printed once and never stored. Losing it means making another
+    one, which takes a second, and that is the whole point of storing only the
+    digest.
+    """
+    for _ in range(count):
+        made = new_key()
+        typer.echo("key    %s" % made)
+        typer.echo("store  %s" % hash_key(made))
+
+
+@key_app.command("hash")
+def key_hash(
+    key: str = typer.Argument(..., help="A key somebody already has."),
+) -> None:
+    """Turn a key somebody is already using into its stored form."""
+    typer.echo(hash_key(key))
+
+
+@key_app.command("check")
+def key_check(
+    ctx: typer.Context,
+    key: str = typer.Argument(..., help="A key to try against the site file."),
+) -> None:
+    """Say whether a key would be accepted by this site."""
+    context = ctx.ensure_object(Context)
+    ring = KeyRing.of(context.site.api_keys)
+    if not ring:
+        typer.echo("this site has no keys, the API is open")
+        return
+    if not ring.accepts(key):
+        raise fail("that key is not on the ring, %s" % ring.advice())
+    typer.echo("accepted, %s" % ring.advice())
+
+
+app.add_typer(key_app, name="key")
 
 
 @app.command()

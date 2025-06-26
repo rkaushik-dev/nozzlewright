@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session, sessionmaker
 
+from nozzlewright.api.keys import KeyRing
 from nozzlewright.fleet.poller import FleetPoller
 from nozzlewright.fleet.registry import Registry
 from nozzlewright.fleet.stats import StatsCollector
@@ -39,6 +40,21 @@ class Services:
     stats: StatsCollector = field(default_factory=StatsCollector)
     poller: FleetPoller | None = None
     api_keys: frozenset[str] = frozenset()
+    _keyring: KeyRing | None = field(default=None, init=False, repr=False)
+    _keyring_source: frozenset[str] | None = field(default=None, init=False, repr=False)
+
+    @property
+    def keyring(self) -> KeyRing:
+        """The keys this gateway accepts, hashed.
+
+        Built from whatever was configured rather than held as one, because the
+        gateway and the tests both hand in a plain set and neither should have
+        to know how a key is stored.
+        """
+        if self._keyring is None or self._keyring_source != self.api_keys:
+            self._keyring = KeyRing.of(self.api_keys)
+            self._keyring_source = self.api_keys
+        return self._keyring
 
     @property
     def auth_required(self) -> bool:
@@ -48,7 +64,7 @@ class Services:
         purpose, because that is how the older handhelds work and locking them
         out at upgrade time would stop a line.
         """
-        return bool(self.api_keys)
+        return bool(self.keyring)
 
     def session_for(self, printer_id: str) -> PrinterSession:
         """The live session for one machine."""
@@ -90,13 +106,13 @@ def require_key(
     """Check the API key, when the gateway has any configured."""
     if not services.auth_required:
         return ""
-    if not key or key not in services.api_keys:
+    if not services.keyring.accepts(key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="a valid %s header is required" % API_KEY_HEADER,
             headers={"WWW-Authenticate": API_KEY_HEADER},
         )
-    return key
+    return key or ""
 
 
 def get_printer_session(
