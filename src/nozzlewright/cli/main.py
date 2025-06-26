@@ -27,6 +27,7 @@ from nozzlewright.cli.output import emit
 from nozzlewright.cli.printer_commands import printer_app
 from nozzlewright.cli.profile_commands import profile_app
 from nozzlewright.cli.serve_commands import db_app, serve_app
+from nozzlewright.doctor import run_checks
 from nozzlewright.errors import NozzlewrightError
 from nozzlewright.fleet.registry import PrinterRecord
 from nozzlewright.settings import load_settings
@@ -69,6 +70,28 @@ def root(
     settings = load_settings()
     configure_logging(level=log_level, fmt=settings.log_format)
     ctx.obj = Context(settings=settings, state_dir=state_dir, user=user, pin=pin, simulate=simulate)
+
+
+@app.command()
+def doctor(
+    ctx: typer.Context,
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """Check whether this box is fit to run a site.
+
+    Exits one when something is actually broken. A warning on its own is not a
+    failure: a gateway with no site file and no labels yet is a gateway
+    somebody is halfway through commissioning, and it should not fail a check.
+    """
+    context = ctx.ensure_object(Context)
+    assert context.state_dir is not None
+    report = run_checks(context.state_dir, context.database_url)
+    if as_json:
+        emit([check.as_dict() for check in report.checks], True)
+    else:
+        typer.echo(report.render())
+    if not report.healthy:
+        raise typer.Exit(code=1)
 
 
 @app.command()
