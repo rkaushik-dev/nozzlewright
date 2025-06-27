@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, TypeVar
 
 import typer
@@ -28,6 +28,12 @@ from nozzlewright.cli.output import emit, fail
 from nozzlewright.cli.printer_commands import printer_app
 from nozzlewright.cli.profile_commands import profile_app
 from nozzlewright.cli.serve_commands import db_app, serve_app
+from nozzlewright.deploy import (
+    DeploymentPlan,
+    render_env,
+    render_install_notes,
+    render_unit,
+)
 from nozzlewright.doctor import run_checks
 from nozzlewright.errors import NozzlewrightError
 from nozzlewright.fleet.registry import PrinterRecord
@@ -117,6 +123,53 @@ def key_check(
 
 
 app.add_typer(key_app, name="key")
+
+
+@app.command()
+def install(
+    ctx: typer.Context,
+    out: Path | None = typer.Option(None, help="Write the files here instead of printing them."),
+    service_state_dir: str = typer.Option("/var/lib/nozzlewright", help="Where the gateway keeps state."),
+    executable: str = typer.Option("/opt/nozzlewright/bin/nozzlewright", help="Where the tool is installed."),
+    user: str = typer.Option("nozzlewright", help="Service user."),
+    port: int = typer.Option(8420, min=1, max=65535, help="Port to serve on."),
+    poll_interval: float = typer.Option(15.0, help="Seconds between readings of a machine."),
+) -> None:
+    """Write the service unit and environment file for this site.
+
+    Printed by default, because the person running this is usually reading it
+    before they commit to it. Pass an output directory to write both files and
+    the four commands that install them.
+    """
+    context = ctx.ensure_object(Context)
+    plan = DeploymentPlan(
+        site_id=context.settings.site_id,
+        state_dir=PurePosixPath(service_state_dir),
+        executable=PurePosixPath(executable),
+        user=user,
+        group=user,
+        port=port,
+        poll_interval_s=poll_interval,
+    )
+    try:
+        plan.validate()
+    except ValueError as error:
+        raise fail(str(error)) from None
+
+    if out is None:
+        typer.echo("# %s" % plan.unit_name)
+        typer.echo(render_unit(plan))
+        typer.echo("# %s" % plan.env_path)
+        typer.echo(render_env(plan))
+        typer.echo("# then, as root")
+        typer.echo(render_install_notes(plan))
+        return
+
+    out.mkdir(parents=True, exist_ok=True)
+    (out / plan.unit_name).write_text(render_unit(plan), encoding="utf-8")
+    (out / plan.env_path.name).write_text(render_env(plan), encoding="utf-8")
+    (out / "install.sh").write_text(render_install_notes(plan), encoding="utf-8")
+    typer.echo("wrote %s, %s and install.sh into %s" % (plan.unit_name, plan.env_path.name, out))
 
 
 @app.command()
