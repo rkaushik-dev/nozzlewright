@@ -25,10 +25,13 @@ SITE = """
 [site]
 id = "bremen-2"
 
+[api]
+keys = ["sha256:%s"]
+
 [[printers]]
 id = "line4"
 endpoint = "10.4.0.21:9100"
-"""
+""" % ("0" * 64)
 
 
 def url_for(tmp_path: Path) -> str:
@@ -157,7 +160,7 @@ def test_every_check_is_named_once(tmp_path: Path) -> None:
     migrate(tmp_path)
     names = [item.name for item in run_checks(tmp_path, url_for(tmp_path), now=NOW).checks]
     assert len(names) == len(set(names))
-    assert len(names) == 6
+    assert len(names) == 7
 
 
 def test_the_report_puts_the_worst_first(tmp_path: Path) -> None:
@@ -207,3 +210,30 @@ def test_the_doctor_as_json(tmp_path: Path) -> None:
 @pytest.mark.parametrize("grade", list(Grade))
 def test_the_grades_are_ordered(grade: Grade) -> None:
     assert 0 <= grade.rank <= 2
+
+
+def test_no_keys_is_a_warning(tmp_path: Path) -> None:
+    migrate(tmp_path)
+    found = check(run_checks(tmp_path, url_for(tmp_path), now=NOW), "api keys")
+    assert found.grade is Grade.WARN
+    assert "answers anybody" in found.detail
+
+
+def test_a_plain_key_is_a_warning(tmp_path: Path) -> None:
+    migrate(tmp_path)
+    (tmp_path / SITE_FILE).write_text('[api]\nkeys = ["alpha"]\n', encoding="utf-8")
+    found = check(run_checks(tmp_path, url_for(tmp_path), now=NOW), "api keys")
+    assert found.grade is Grade.WARN
+    assert "in the clear" in found.detail
+
+
+def test_hashed_keys_pass(tmp_path: Path) -> None:
+    from nozzlewright.api.keys import hash_key
+
+    migrate(tmp_path)
+    (tmp_path / SITE_FILE).write_text(
+        '[api]\nkeys = ["%s"]\n' % hash_key("alpha"), encoding="utf-8"
+    )
+    found = check(run_checks(tmp_path, url_for(tmp_path), now=NOW), "api keys")
+    assert found.ok
+    assert "all hashed" in found.detail

@@ -60,6 +60,11 @@ class HealthOut(BaseModel):
     site_id: str
     printers: int = 0
     database: str = "up"
+    #: How many API keys the gateway will accept. Never which ones.
+    keys: int = 0
+    #: True when the gateway is answering anybody who asks.
+    open_to_all: bool = True
+    polling: bool = False
 
 
 class PrinterIn(BaseModel):

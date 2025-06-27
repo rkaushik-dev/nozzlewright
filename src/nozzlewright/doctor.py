@@ -28,6 +28,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 
+from nozzlewright.api.keys import KeyRing
 from nozzlewright.labels.store import LabelStore
 from nozzlewright.siteconfig import load_site, site_path
 from nozzlewright.storage.engine import build_engine
@@ -127,6 +128,7 @@ def _every_check(state_dir: Path, database_url: str, now: datetime) -> Iterator[
         ("database", lambda: _database(database_url)),
         ("site file", lambda: _site_file(state_dir)),
         ("label store", lambda: _labels(state_dir)),
+        ("api keys", lambda: _keys(state_dir)),
         ("clock", lambda: _clock(now)),
     )
     for name, check in named:
@@ -208,6 +210,23 @@ def _labels(state_dir: Path) -> Check:
     if broken:
         return Check("label store", Grade.FAIL, "will not parse: %s" % ", ".join(sorted(broken)))
     return Check("label store", Grade.OK, "%d labels, all parse" % len(names))
+
+
+def _keys(state_dir: Path) -> Check:
+    """Are the API keys there, and are they stored the right way.
+
+    An open gateway is a warning rather than a failure. Plenty of sites run one
+    on a cell network nothing else is on, and a check that failed would train
+    everybody to ignore the check rather than to close the gateway.
+    """
+    path = site_path(state_dir)
+    keys = load_site(path).api_keys if path.exists() else frozenset()
+    ring = KeyRing.of(keys)
+    if not ring:
+        return Check("api keys", Grade.WARN, "none, the API answers anybody")
+    if ring.has_plain:
+        return Check("api keys", Grade.WARN, ring.advice())
+    return Check("api keys", Grade.OK, ring.advice())
 
 
 def _clock(now: datetime) -> Check:

@@ -32,12 +32,16 @@ def health(
     except Exception:
         count = 0
         database = "down"
+    ring = services.keyring
     return HealthOut(
         ok=database == "up",
         version=__version__,
         site_id=services.settings.site_id,
         printers=count,
         database=database,
+        keys=len(ring),
+        open_to_all=not ring,
+        polling=services.poller is not None,
     )
 
 

@@ -473,3 +473,25 @@ async def test_a_revision_page_past_the_end(harness: Harness) -> None:
         page = await client.get("/labels/carton/revisions", params={"offset": 50})
     assert page.json()["items"] == []
     assert page.json()["total"] == 1
+
+
+async def test_health_says_how_many_keys_there_are(harness: Harness) -> None:
+    harness.services.api_keys = frozenset({"alpha", "beta"})
+    async with client_for(harness) as client:
+        body = (await client.get("/health")).json()
+    assert body["keys"] == 2
+    assert not body["open_to_all"]
+
+
+async def test_health_says_when_the_gateway_is_open(harness: Harness) -> None:
+    async with client_for(harness) as client:
+        body = (await client.get("/health")).json()
+    assert body["keys"] == 0
+    assert body["open_to_all"]
+
+
+async def test_health_never_says_what_a_key_is(harness: Harness) -> None:
+    harness.services.api_keys = frozenset({"alpha"})
+    async with client_for(harness) as client:
+        text = (await client.get("/health")).text
+    assert "alpha" not in text
