@@ -228,3 +228,33 @@ def test_a_clean_report_says_so() -> None:
 @pytest.mark.parametrize("dpi", [150, 300, 600])
 def test_the_check_runs_at_every_firing_rate(dpi: int) -> None:
     assert check(GOOD, head=head(dpi=dpi)).ok
+
+
+def test_the_smoke_script_is_importable() -> None:
+    """It is run by CI as a script, so nothing may break at import time."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "smoke.py"
+    spec = importlib.util.spec_from_file_location("nzw_smoke", path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.KEY
+    assert module.CARTON.startswith("LABEL carton")
+
+
+def test_the_smoke_script_fails_loudly() -> None:
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "smoke.py"
+    spec = importlib.util.spec_from_file_location("nzw_smoke_two", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    module.expect(True, "this one is fine")
+    with pytest.raises(module.Failed, match="this one is not"):
+        module.expect(False, "this one is not")

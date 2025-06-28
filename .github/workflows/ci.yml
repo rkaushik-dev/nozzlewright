@@ -102,3 +102,45 @@ jobs:
 
       - name: upgrade again is a no op
         run: python -m nozzlewright.cli --state-dir ./ci-state db upgrade
+
+  smoke:
+    # The suite can be green on a build that will not start. This brings the
+    # whole gateway up against simulated machines and walks the endpoints.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: smoke
+        run: python scripts/smoke.py
+
+      - name: doctor on a fresh box
+        run: |
+          python -m nozzlewright.cli --state-dir ./ci-state db upgrade
+          python -m nozzlewright.cli --state-dir ./ci-state doctor
+
+      - name: the install files render
+        run: python -m nozzlewright.cli --state-dir ./ci-state install --out ./ci-deploy
+
+  image:
+    # The Dockerfile is the other way this ships. Built on every push so it
+    # cannot rot, and never pushed anywhere from here.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build
+        run: docker build --tag nozzlewright-gateway:ci .
+
+      - name: the image can run the tool
+        run: docker run --rm --entrypoint nozzlewright nozzlewright-gateway:ci --help
