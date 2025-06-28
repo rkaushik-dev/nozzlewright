@@ -26,13 +26,16 @@ import typer
 from nozzlewright.cli.context import Context
 from nozzlewright.cli.output import emit, fail
 from nozzlewright.errors import NozzlewrightError
+from nozzlewright.fleet.alarms import escalated
 from nozzlewright.fleet.distribute import Distribution, distribute
 from nozzlewright.fleet.export import write_alarms, write_jobs, write_samples
 from nozzlewright.fleet.report import build_report
 from nozzlewright.fleet.shifts import DEFAULT_PATTERN, shift_at, spans_for_day
 from nozzlewright.labels.fields import ShiftWindow
 from nozzlewright.labels.store import LabelStore
+from nozzlewright.printer.status import Severity
 from nozzlewright.session.pool import SessionPool
+from nozzlewright.storage.audit import Action, AuditLog
 from nozzlewright.storage.engine import build_engine, build_sessionmaker, session_scope
 from nozzlewright.storage.repo import AlarmRepo, JobRepo, PrinterRepo
 
@@ -173,6 +176,57 @@ def fleet_alarms(
             for row in AlarmRepo(session).active(printer_id or None)
         ]
     emit(rows, as_json)
+
+
+@fleet_app.command("ack")
+def fleet_ack(
+    ctx: typer.Context,
+    printer_id: str = typer.Argument(..., help="Machine whose alarms to take."),
+    name: str = typer.Argument("", help="One alarm. Empty takes every one that is up."),
+    escalated_only: bool = typer.Option(
+        False, "--escalated", help="Only the ones that have climbed to a stop."
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """Say that somebody is dealing with an alarm.
+
+    An acknowledged alarm stops climbing and stops being sent out, which is
+    what somebody walking to the machine wants and what nobody else should be
+    able to do on their behalf. So the operator name comes from the session and
+    is not an option: an acknowledgement signed by whoever was logged in is
+    worth something, and one signed by a name somebody typed is not.
+    """
+    context = _context(ctx)
+    who = context.user.strip()
+    if not who:
+        raise fail("say who you are with --user, an acknowledgement needs a name")
+
+    now = datetime.now(UTC)
+    taken: list[dict[str, object]] = []
+    with session_scope(_factory(context)) as session:  # type: ignore[arg-type]
+        repo = PrinterRepo(session)
+        printer = repo.get(printer_id)
+        if printer is None:
+            raise fail("no machine called %s" % printer_id)
+
+        alarms = AlarmRepo(session)
+        log = AuditLog(session, actor=who)
+        for row in alarms.active(printer_id):
+            if name and row.name != name:
+                continue
+            if row.acknowledged_by:
+                continue
+            level = escalated(row.severity, row.raised_at, now, acknowledged=False, cleared=False)
+            if escalated_only and level is not Severity.STOP:
+                continue
+            alarms.acknowledge(printer, row.name, who)
+            log.record(Action.ALARM_ACKNOWLEDGED, printer_id=printer_id, subject=row.name, at=now)
+            taken.append({"printer_id": printer_id, "alarm": row.name, "severity": level.value})
+
+    if not taken:
+        typer.echo("nothing to take on %s" % printer_id)
+        return
+    emit(taken, as_json)
 
 
 @fleet_app.command("runs")
