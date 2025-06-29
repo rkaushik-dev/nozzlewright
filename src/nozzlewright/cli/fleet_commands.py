@@ -18,20 +18,24 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import typer
 
 from nozzlewright.cli.context import Context
+from nozzlewright.cli.label_commands import DEFAULT_SHIFTS, default_fonts
 from nozzlewright.cli.output import emit, fail
 from nozzlewright.errors import NozzlewrightError
 from nozzlewright.fleet.alarms import escalated
+from nozzlewright.fleet.costing import drops_in, spend_over
 from nozzlewright.fleet.distribute import Distribution, distribute
 from nozzlewright.fleet.export import write_alarms, write_jobs, write_samples
 from nozzlewright.fleet.report import build_report
 from nozzlewright.fleet.shifts import DEFAULT_PATTERN, shift_at, spans_for_day
-from nozzlewright.labels.fields import ShiftWindow
+from nozzlewright.labels.fields import FieldContext, ShiftWindow
+from nozzlewright.labels.raster import render_label
 from nozzlewright.labels.store import LabelStore
 from nozzlewright.printer.status import Severity
 from nozzlewright.session.pool import SessionPool
@@ -325,6 +329,61 @@ def fleet_push(
     typer.echo(outcome.summary())
     if not outcome.ok:
         raise typer.Exit(code=1)
+
+
+@fleet_app.command("cost")
+def fleet_cost(
+    ctx: typer.Context,
+    since: str = typer.Option("", help="Window start, ISO form."),
+    until: str = typer.Option("", help="Window end, ISO form."),
+    shift: str = typer.Option("", help="Shift code, or day, now or last."),
+    on: str = typer.Option("", help="Which day the shift is on, ISO form."),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """What the ink cost over a window, by message.
+
+    Every message is rendered once to get its dot count, which is the only
+    honest way to price it. A message that has been deleted from the store
+    since it ran is named rather than guessed at.
+    """
+    context = _context(ctx)
+    model = context.site.costing
+    if model is None:
+        raise fail("no cartridge price, put a costing block in the site file")
+
+    start, end = resolve_window(since, until, shift, on, pattern=_pattern(context))
+    with session_scope(_factory(context)) as session:  # type: ignore[arg-type]
+        runs = JobRepo(session).between(start, end)
+        printed: dict[str, int] = {}
+        for run in runs:
+            printed[run.label] = printed.get(run.label, 0) + run.printed
+
+    store = LabelStore(context.state_dir / "labels")  # type: ignore[operator]
+    store.open()
+    fonts = default_fonts()
+    field_context = FieldContext(
+        now=start, counters={}, shifts=context.site.shifts or DEFAULT_SHIFTS
+    )
+    drops: dict[str, int] = {}
+    for label in printed:
+        if not store.has(label):
+            continue
+        template = store.load(label)
+        resolved = template.resolve(
+            replace(
+                field_context,
+                counters={item.name: 1 for item in template.fields},
+                prompts={item.name: "X" * 4 for item in template.interactive_fields()},
+            )
+        )
+        drops[label] = drops_in(render_label(resolved, fonts))
+
+    result = spend_over(printed, drops, model)
+    if not result.labels and not result.unpriced:
+        typer.echo("nothing ran in that window")
+        return
+    emit([row.as_dict() for row in result.dearest()], as_json)
+    typer.echo(result.summary())
 
 
 @fleet_app.command("export")

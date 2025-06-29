@@ -24,6 +24,7 @@ time, and both are the cartridge module's business, not this one's.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -34,10 +35,13 @@ from nozzlewright.printer.cartridge import CartridgeSpec, InkLedger
 __all__ = [
     "CostModel",
     "LabelCost",
+    "LabelSpend",
     "RunForecast",
+    "Spend",
     "cost_of_label",
     "drops_in",
     "forecast",
+    "spend_over",
 ]
 
 #: Picolitres in a millilitre.
@@ -163,6 +167,98 @@ def cost_of_label(label: str, matrix: DotMatrix, model: CostModel) -> LabelCost:
         purge_cost_per_thousand=purge_cost,
         codes_per_cartridge=int(model.drops_per_cartridge // per_code_drops),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class LabelSpend:
+    """What one message cost over a window."""
+
+    label: str
+    codes: int
+    drops_per_code: int
+    cost: float
+
+    @property
+    def drops(self) -> int:
+        """Drops thrown on this message."""
+        return self.codes * self.drops_per_code
+
+    def as_dict(self) -> dict[str, object]:
+        """A plain mapping for the console and the API."""
+        return {
+            "label": self.label,
+            "codes": self.codes,
+            "drops_per_code": self.drops_per_code,
+            "cost": round(self.cost, 4),
+        }
+
+
+@dataclass
+class Spend:
+    """What a window of production cost in ink."""
+
+    labels: tuple[LabelSpend, ...] = ()
+    unpriced: tuple[str, ...] = ()
+
+    @property
+    def codes(self) -> int:
+        """Product coded across every message."""
+        return sum(row.codes for row in self.labels)
+
+    @property
+    def cost(self) -> float:
+        """What the ink came to."""
+        return sum(row.cost for row in self.labels)
+
+    @property
+    def cost_per_thousand(self) -> float:
+        """The number a plant manager compares against the tender."""
+        return self.cost / self.codes * 1000.0 if self.codes else 0.0
+
+    def dearest(self) -> tuple[LabelSpend, ...]:
+        """Messages sorted by what they cost, worst first."""
+        return tuple(sorted(self.labels, key=lambda row: row.cost, reverse=True))
+
+    def summary(self) -> str:
+        """One line for the console."""
+        head = "%d codes, %.2f of ink, %.3f per thousand" % (
+            self.codes,
+            self.cost,
+            self.cost_per_thousand,
+        )
+        if self.unpriced:
+            return "%s. Not counted: %s" % (head, ", ".join(self.unpriced))
+        return head
+
+
+def spend_over(printed: Mapping[str, int], drops: Mapping[str, int], model: CostModel) -> Spend:
+    """What a window of production cost, by message.
+
+    ``printed`` is how many of each message went out, which comes off the run
+    records. ``drops`` is how many drops each one throws, which comes off
+    rendering it. A message that was printed and cannot be rendered is named
+    rather than guessed at: a label deleted from the store since the run is
+    exactly the case, and inventing a dot count for it would quietly move the
+    cost per thousand.
+    """
+    model.validate()
+    rows: list[LabelSpend] = []
+    unpriced: list[str] = []
+    for label, codes in sorted(printed.items()):
+        per_code = drops.get(label, 0)
+        if per_code <= 0 or codes <= 0:
+            if codes > 0:
+                unpriced.append(label)
+            continue
+        rows.append(
+            LabelSpend(
+                label=label,
+                codes=codes,
+                drops_per_code=per_code,
+                cost=model.price_of(codes * per_code),
+            )
+        )
+    return Spend(labels=tuple(rows), unpriced=tuple(unpriced))
 
 
 @dataclass(frozen=True, slots=True)
