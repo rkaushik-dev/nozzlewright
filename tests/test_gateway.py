@@ -348,3 +348,25 @@ def test_a_sweep_before_prepare_touches_no_metrics(tmp_path: Path) -> None:
     gateway = build(tmp_path)
     assert gateway.sweep().rows == 0
     assert gateway.metrics is None
+
+
+async def test_the_gateway_polls_on_a_cadence(tmp_path: Path) -> None:
+    gateway = build(site(tmp_path, "line4"))
+    await gateway.start()
+    assert gateway.poller is not None
+    assert gateway.poller.cadence is not None
+    assert gateway.poller.cadence.base_s == gateway.poll_interval_s
+    await gateway.stop()
+
+
+async def test_a_machine_nobody_can_reach_is_backed_off(tmp_path: Path) -> None:
+    gateway = build(site(tmp_path, "line4"))
+    await gateway.start()
+    assert gateway.poller is not None
+    poller = gateway.poller
+    poller._results["line4"] = PollResult(
+        printer_id="line4", at=0.0, duration_s=2.0, error="no answer"
+    )
+    poller._failures["line4"] = 3
+    assert poller._delay("line4") > gateway.poll_interval_s
+    await gateway.stop()

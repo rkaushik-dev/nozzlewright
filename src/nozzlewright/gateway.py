@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from nozzlewright.api.app import build_app
 from nozzlewright.api.deps import Services
 from nozzlewright.cli.context import build_transport
+from nozzlewright.fleet.cadence import Cadence
 from nozzlewright.fleet.notify import LogSink, Notifier, Sink, WebhookSink
 from nozzlewright.fleet.poller import FleetPoller, PollResult
 from nozzlewright.fleet.registry import PrinterRecord, Registry
@@ -154,6 +155,7 @@ class Gateway:
             provider=self._session_for,
             interval_s=self.poll_interval_s,
             on_result=self._record,
+            cadence=Cadence(base_s=self.poll_interval_s),
         )
         await self.poller.start()
         self.services.poller = self.poller

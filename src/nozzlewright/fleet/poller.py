@@ -23,9 +23,10 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from nozzlewright.errors import NozzlewrightError
+from nozzlewright.fleet.cadence import Cadence, next_interval
 from nozzlewright.fleet.registry import PrinterRecord, Registry
 from nozzlewright.printer.operations import read_status
-from nozzlewright.printer.status import PrinterStatus, Severity
+from nozzlewright.printer.status import MachineState, PrinterStatus, Severity
 from nozzlewright.session.supervisor import PrinterSession
 from nozzlewright.telemetry.logging import get_logger
 
@@ -73,11 +74,15 @@ class FleetPoller:
     interval_s: float = 15.0
     jitter: float = 0.15
     on_result: ResultHook | None = None
+    #: How the interval moves with what a machine is doing. None keeps the
+    #: fixed interval, which is what the tests that measure timing want.
+    cadence: Cadence | None = None
 
     _sessions: dict[str, PrinterSession] = field(default_factory=dict, init=False)
     _tasks: dict[str, asyncio.Task[None]] = field(default_factory=dict, init=False)
     _results: dict[str, PollResult] = field(default_factory=dict, init=False)
     _running: bool = field(default=False, init=False)
+    _failures: dict[str, int] = field(default_factory=dict, init=False)
     _random: random.Random = field(default_factory=random.Random, init=False)
 
     def __post_init__(self) -> None:
@@ -138,6 +143,7 @@ class FleetPoller:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._tasks.clear()
+        self._failures.clear()
         for session in self._sessions.values():
             await session.stop()
         self._sessions.clear()
@@ -163,6 +169,10 @@ class FleetPoller:
                 status=status,
             )
         self._results[printer_id] = result
+        if result.reachable:
+            self._failures.pop(printer_id, None)
+        else:
+            self._failures[printer_id] = self._failures.get(printer_id, 0) + 1
         if self.on_result is not None:
             await self.on_result(result)
         return result
@@ -171,12 +181,35 @@ class FleetPoller:
         """A random offset inside one interval, so machines do not sync up."""
         return self._random.uniform(0.0, self.interval_s)
 
-    def _delay(self) -> float:
-        """The wait between two polls of one machine."""
+    def failures_of(self, printer_id: str) -> int:
+        """How many readings in a row this machine has failed."""
+        return self._failures.get(printer_id, 0)
+
+    def _delay(self, printer_id: str) -> float:
+        """The wait before the next poll of one machine.
+
+        The jitter goes on last and is a fraction of whatever the cadence
+        decided rather than of the base interval. Backing a machine off to five
+        minutes and then jittering it by two seconds would put every dead
+        machine on the site back in step with each other.
+        """
+        interval = self.interval_s
+        if self.cadence is not None:
+            last = self._results.get(printer_id)
+            interval = next_interval(
+                self.cadence,
+                seen=last is not None,
+                reachable=last is None or last.reachable,
+                severity=Severity.INFO if last is None else last.severity,
+                printing=last is not None
+                and last.status is not None
+                and last.status.state is MachineState.PRINTING,
+                failures=self.failures_of(printer_id),
+            )
         if not self.jitter:
-            return self.interval_s
-        spread = self.interval_s * self.jitter
-        return max(self.interval_s + self._random.uniform(-spread, spread), 0.01)
+            return interval
+        spread = interval * self.jitter
+        return max(interval + self._random.uniform(-spread, spread), 0.01)
 
     async def _loop(self, printer_id: str) -> None:
         """Poll one machine forever."""
@@ -187,5 +220,5 @@ class FleetPoller:
             # particular has to propagate or stop() waits on a task that will
             # not end.
             await self.poll_once(printer_id)
-            await asyncio.sleep(self._delay())
+            await asyncio.sleep(self._delay(printer_id))
         _log.info("poll loop stopped", printer=printer_id)
