@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 from nozzlewright import __version__
 from nozzlewright.api.deps import Services
+from nozzlewright.api.openapi import install_openapi
 from nozzlewright.errors import (
     CommandRejected,
     ConfigError,
@@ -99,4 +100,7 @@ def build_app(services: Services) -> FastAPI:
     app.include_router(fleet_router)
     app.include_router(history_router)
     app.include_router(ops_router)
+
+    # Last, because it reads the routes to build the document.
+    install_openapi(app)
     return app
