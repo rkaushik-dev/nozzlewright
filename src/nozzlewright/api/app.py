@@ -91,10 +91,12 @@ def build_app(services: Services) -> FastAPI:
     from nozzlewright.api.routes_fleet import router as fleet_router
     from nozzlewright.api.routes_history import router as history_router
     from nozzlewright.api.routes_labels import router as labels_router
+    from nozzlewright.api.routes_ops import router as ops_router
     from nozzlewright.api.routes_printers import router as printers_router
 
     app.include_router(printers_router)
     app.include_router(labels_router)
     app.include_router(fleet_router)
     app.include_router(history_router)
+    app.include_router(ops_router)
     return app
