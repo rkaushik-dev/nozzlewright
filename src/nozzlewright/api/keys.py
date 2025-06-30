@@ -106,5 +106,7 @@ class KeyRing:
         if not self.digests:
             return "no keys, the API is open"
         if self.has_plain:
-            return "%d keys, some stored in the clear, run nozzlewright key hash" % len(self.digests)
+            return "%d keys, some stored in the clear, run nozzlewright key hash" % len(
+                self.digests
+            )
         return "%d keys, all hashed" % len(self.digests)

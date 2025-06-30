@@ -65,6 +65,8 @@ class HealthOut(BaseModel):
     #: True when the gateway is answering anybody who asks.
     open_to_all: bool = True
     polling: bool = False
+    #: The interpreter and the SQLite underneath, for a support call.
+    build: dict[str, object] = Field(default_factory=dict)
 
 
 class PrinterIn(BaseModel):

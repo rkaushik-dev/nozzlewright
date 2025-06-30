@@ -59,7 +59,9 @@ def _parse(text: str, field: str) -> datetime:
     try:
         moment = datetime.fromisoformat(text)
     except ValueError:
-        raise NozzlewrightError("%s=%r is not a date and time in ISO form" % (field, text)) from None
+        raise NozzlewrightError(
+            "%s=%r is not a date and time in ISO form" % (field, text)
+        ) from None
     return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
 
 

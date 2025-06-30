@@ -21,6 +21,7 @@ import typer
 
 from nozzlewright import __version__
 from nozzlewright.api.keys import KeyRing, hash_key, new_key
+from nozzlewright.buildinfo import build_info
 from nozzlewright.cli.context import Context
 from nozzlewright.cli.fleet_commands import fleet_app
 from nozzlewright.cli.label_commands import label_app
@@ -129,8 +130,12 @@ app.add_typer(key_app, name="key")
 def install(
     ctx: typer.Context,
     out: Path | None = typer.Option(None, help="Write the files here instead of printing them."),
-    service_state_dir: str = typer.Option("/var/lib/nozzlewright", help="Where the gateway keeps state."),
-    executable: str = typer.Option("/opt/nozzlewright/bin/nozzlewright", help="Where the tool is installed."),
+    service_state_dir: str = typer.Option(
+        "/var/lib/nozzlewright", help="Where the gateway keeps state."
+    ),
+    executable: str = typer.Option(
+        "/opt/nozzlewright/bin/nozzlewright", help="Where the tool is installed."
+    ),
     user: str = typer.Option("nozzlewright", help="Service user."),
     port: int = typer.Option(8420, min=1, max=65535, help="Port to serve on."),
     poll_interval: float = typer.Option(15.0, help="Seconds between readings of a machine."),
@@ -195,9 +200,24 @@ def doctor(
 
 
 @app.command()
-def version() -> None:
-    """Print the version and exit."""
-    typer.echo(__version__)
+def version(
+    short: bool = typer.Option(False, "--short", help="Just the version number."),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """Print what is running here.
+
+    The bare version on its own is what a script wants and everything else is
+    what a support call wants, so both are here and the long form is the
+    default. A person who runs this without reading the help is on a phone.
+    """
+    if short:
+        typer.echo(__version__)
+        return
+    info = build_info()
+    if as_json:
+        emit(info.as_dict(), True)
+        return
+    typer.echo(info.render())
 
 
 @registry_app.command("list")

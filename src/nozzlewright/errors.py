@@ -18,13 +18,13 @@ __all__ = [
     "LabelError",
     "LinkClosed",
     "NotAuthenticated",
+    "NozzlewrightError",
     "PermissionDenied",
     "PrinterBusy",
     "PrinterError",
     "ProtocolError",
     "TransportError",
     "UnknownCommand",
-    "NozzlewrightError",
 ]
 
 

@@ -38,7 +38,8 @@ def test_proof_measures_the_message() -> None:
     proof = make_proof(parse_label(CARTON), fonts(), context())
     assert proof.name == "carton"
     assert proof.height_dots == 16
-    assert proof.width_dots == FIVE_BY_SEVEN.measure("HALVEX")
+    # The date is the wider of the two elements, so it sets the message width.
+    assert proof.width_dots == FIVE_BY_SEVEN.measure("14/06/25")
     assert proof.dots > 0
 
 

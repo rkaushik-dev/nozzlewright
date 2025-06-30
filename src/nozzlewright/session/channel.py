@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from itertools import count
 
-from nozzlewright.errors import CommandRejected, LinkClosed, PrinterBusy, NozzlewrightError
+from nozzlewright.errors import CommandRejected, LinkClosed, NozzlewrightError, PrinterBusy
 from nozzlewright.protocol.codec import Request, Response, build_request, parse_response
 from nozzlewright.protocol.dialects import REVISION_TWO, Dialect
 from nozzlewright.protocol.framing import FrameBuffer, encode_frame

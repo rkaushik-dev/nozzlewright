@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Protocol
 
-from nozzlewright.errors import CommandRejected, PrinterBusy, NozzlewrightError
+from nozzlewright.errors import CommandRejected, NozzlewrightError, PrinterBusy
 from nozzlewright.printer.operations import read_status
 from nozzlewright.printer.status import MachineState, PrinterStatus, Severity
 from nozzlewright.session.supervisor import PrinterSession

@@ -24,11 +24,11 @@ from nozzlewright.errors import (
     LabelError,
     LinkClosed,
     NotAuthenticated,
+    NozzlewrightError,
     PermissionDenied,
     PrinterBusy,
     ProtocolError,
     TransportError,
-    NozzlewrightError,
 )
 from nozzlewright.telemetry.logging import get_logger
 

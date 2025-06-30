@@ -13,9 +13,9 @@ from nozzlewright.errors import (
     ConfigError,
     LabelError,
     LinkClosed,
+    NozzlewrightError,
     PermissionDenied,
     PrinterBusy,
-    NozzlewrightError,
 )
 from nozzlewright.fleet.poller import FleetPoller
 from nozzlewright.fleet.registry import PrinterRecord, Registry
@@ -495,3 +495,11 @@ async def test_health_never_says_what_a_key_is(harness: Harness) -> None:
     async with client_for(harness) as client:
         text = (await client.get("/health")).text
     assert "alpha" not in text
+
+
+async def test_health_carries_the_build(harness: Harness) -> None:
+    async with client_for(harness) as client:
+        body = (await client.get("/health")).json()
+    assert body["build"]["version"] == body["version"]
+    assert body["build"]["sqlite_ok"]
+    assert "python" in body["build"]

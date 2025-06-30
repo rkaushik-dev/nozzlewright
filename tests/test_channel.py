@@ -173,7 +173,14 @@ async def test_keepalive_goes_out_when_idle() -> None:
     channel, printer = await open_channel(
         settings=SessionSettings(keepalive_interval_s=0.02, command_timeout_s=0.5)
     )
-    await asyncio.sleep(0.12)
+    # Wait for the second keepalive rather than sleeping a fixed span and
+    # hoping. Twenty milliseconds inside a hundred and twenty looks like six
+    # chances, and on a loaded runner whose event loop wakes every fifteen it
+    # can be fewer than two.
+    for _ in range(100):
+        if channel.stats.keepalives >= 2:
+            break
+        await asyncio.sleep(0.01)
     await channel.stop()
     assert channel.stats.keepalives >= 2
     assert printer.count("PING") >= 2

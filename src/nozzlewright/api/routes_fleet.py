@@ -16,6 +16,7 @@ from nozzlewright.api.board import render_board
 from nozzlewright.api.deps import Services, get_services, get_session, require_key
 from nozzlewright.api.paging import Page, PageParams, page_params
 from nozzlewright.api.schemas import AlarmOut, HealthOut, SiteOut, StatusOut
+from nozzlewright.buildinfo import build_info
 from nozzlewright.storage.repo import AlarmRepo, PrinterRepo
 
 router = APIRouter(tags=["fleet"])
@@ -42,6 +43,7 @@ def health(
         keys=len(ring),
         open_to_all=not ring,
         polling=services.poller is not None,
+        build=build_info().as_dict(),
     )
 
 
