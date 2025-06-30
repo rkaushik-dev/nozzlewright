@@ -17,9 +17,11 @@ import typer
 
 from nozzlewright.cli.context import Context
 from nozzlewright.cli.output import emit, fail
+from nozzlewright.fleet.drift import DriftReport, find_drift
 from nozzlewright.fleet.profiles import Profile, ProfileStore
 from nozzlewright.fleet.rollout import Rollout, RolloutPlan
 from nozzlewright.printer.operations import read_config
+from nozzlewright.session.pool import SessionPool
 from nozzlewright.session.supervisor import PrinterSession
 
 __all__ = ["profile_app"]
@@ -138,6 +140,44 @@ def profile_plan(
         ],
         as_json,
     )
+
+
+@profile_app.command("drift")
+def profile_drift(
+    ctx: typer.Context,
+    printer_id: list[str] = typer.Option([], "--printer", help="Only these machines."),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """Say which machines no longer match the profile that claims them.
+
+    Reads only. Fixing the drift is what a rollout does, and half of these
+    differences are somebody solving a real problem at two in the morning, so
+    the fix is a decision and not a consequence of having looked.
+
+    Exits one when anything has moved, so a nightly job can say so.
+    """
+    from nozzlewright.cli.main import run
+
+    context = _context(ctx)
+    registry = context.load_registry()
+    store = _store(ctx)
+    pool = SessionPool(factory=context.session_for)
+
+    async def work() -> DriftReport:
+        try:
+            return await find_drift(pool, store, registry, printer_id)
+        finally:
+            await pool.close()
+
+    report = run(work())
+    rows = report.as_rows()
+    if rows:
+        emit(rows, as_json)
+    for machine in report.unreadable + report.unclaimed:
+        typer.echo(machine.summary())
+    typer.echo(report.summary())
+    if report.drifted:
+        raise typer.Exit(code=1)
 
 
 @profile_app.command("rollout")
