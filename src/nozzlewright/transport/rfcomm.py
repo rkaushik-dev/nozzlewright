@@ -38,6 +38,21 @@ def rfcomm_available() -> bool:
     return hasattr(socket, "AF_BLUETOOTH")
 
 
+def _bluetooth_family() -> int:
+    """The AF_BLUETOOTH constant, looked up rather than named.
+
+    Whether the interpreter exposes it depends on how CPython was built, which
+    is why availability is probed with ``hasattr`` a few lines up rather than
+    assumed. Naming the attribute directly makes a type checker reject this
+    file on any platform whose stubs leave the constant out, which is a
+    complaint about the stubs and not about the code.
+    """
+    family = getattr(socket, "AF_BLUETOOTH", None)
+    if family is None:
+        raise TransportError("this platform has no bluetooth socket support")
+    return int(family)
+
+
 def _normalise_address(address: str) -> str:
     """Upper case a MAC and check it looks like one."""
     text = address.strip().upper().replace("-", ":")
@@ -56,10 +71,7 @@ def _normalise_address(address: str) -> str:
 
 def _default_factory(address: str, channel: int) -> socket.socket:
     """Open a real RFCOMM socket to ``address`` on ``channel``."""
-    if not rfcomm_available():
-        raise TransportError("this platform has no bluetooth socket support")
-    family = socket.AF_BLUETOOTH
-    sock = socket.socket(family, socket.SOCK_STREAM, _BTPROTO_RFCOMM)
+    sock = socket.socket(_bluetooth_family(), socket.SOCK_STREAM, _BTPROTO_RFCOMM)
     sock.setblocking(False)
     return sock
 

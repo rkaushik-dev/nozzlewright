@@ -25,7 +25,15 @@ dependencies = [
     "fastapi==0.115.8",
     "uvicorn[standard]==0.34.0",
     "typer==0.15.1",
+    # Typer only asks for click>=8.0, so an unpinned resolve picks up 8.2,
+    # which dropped CliRunner(mix_stderr=...). Pin it to what the rest of these
+    # versions were chosen against.
+    "click==8.1.8",
     "prometheus-client==0.21.1",
+    # The gateway posts alarm notices, so this is a runtime dependency and not
+    # a test one. It sat in the dev extra until a container built with a plain
+    # `pip install .` could not import the CLI at all.
+    "httpx==0.28.1",
 ]
 
 [project.scripts]
@@ -38,8 +46,6 @@ dev = [
     "pytest-cov==6.0.0",
     "ruff==0.9.6",
     "mypy==1.15.0",
-    "httpx==0.28.1",
-    "pytest-cov==6.0.0",
 ]
 
 [tool.setuptools.packages.find]
