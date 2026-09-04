@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import httpx
@@ -14,6 +15,21 @@ from nozzlewright.settings import LinkSettings, SessionSettings, Settings
 from nozzlewright.storage.schema import head_revision
 
 runner = CliRunner(mix_stderr=False)
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def without_colour(text: str) -> str:
+    """CLI output with the colour taken out.
+
+    Typer renders help through Rich, and Rich decides whether to emit colour
+    from the environment. A terminal gets none of it, but a CI runner sets
+    FORCE_COLOR, and then the escapes land *inside* an option name, so
+    ``"--poll-interval" in stdout`` is False on a build that is perfectly
+    healthy. Assert against what a person reads, not against the bytes.
+    """
+    return _ANSI.sub("", text)
+
 
 HEAD = head_revision("sqlite:///:memory:")
 
@@ -157,5 +173,5 @@ async def test_the_metrics_endpoint_before_the_gateway_is_prepared(tmp_path: Pat
 def test_serve_help_lists_the_options() -> None:
     result = runner.invoke(app, ["serve", "--help"])
     assert result.exit_code == 0
-    assert "--poll-interval" in result.stdout
-    assert "--api-keys" in result.stdout
+    assert "--poll-interval" in without_colour(result.stdout)
+    assert "--api-keys" in without_colour(result.stdout)
