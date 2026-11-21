@@ -67,6 +67,40 @@ public final class Notifier {
         return new Builder(siteId);
     }
 
+    /** The sinks notices are delivered to, in order. */
+    public List<Sink> sinks() {
+        return sinks;
+    }
+
+    /** The least severity that is ever sent. */
+    public Severity floor() {
+        return floor;
+    }
+
+    /** How long the same alarm stays quiet after a message. */
+    public Duration quiet() {
+        return quiet;
+    }
+
+    /** How long an unacknowledged stop waits before it is sent again. */
+    public Duration reminder() {
+        return reminder;
+    }
+
+    /**
+     * A notifier with the same rules speaking through other sinks, remembering nothing and counting
+     * from nought.
+     */
+    public Notifier withSinks(List<? extends Sink> values) {
+        return builder(siteId)
+                .sinks(values)
+                .floor(floor)
+                .quiet(quiet)
+                .reminder(reminder)
+                .clock(clock)
+                .build();
+    }
+
     /** The site the notices are for. */
     public String siteId() {
         return siteId;

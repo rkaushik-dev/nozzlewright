@@ -152,20 +152,20 @@ public final class Metrics implements FleetPoller.ResultHook {
      * <p>Counters are brought up to a total rather than incremented, because the notifier keeps its
      * own running count and the two would drift the first time a scrape was missed.
      */
-    public void observeNotifier(Map<String, Integer> stats) {
-        raiseTo(notices, stats.getOrDefault("sent", 0), siteId);
-        raiseTo(noticeFailures, stats.getOrDefault("failed", 0), siteId);
+    public void observeNotifier(Map<String, ? extends Number> stats) {
+        raiseTo(notices, count(stats, "sent"), siteId);
+        raiseTo(noticeFailures, count(stats, "failed"), siteId);
     }
 
     /** Fold in what the janitor has deleted, by table, leaving the database size gauge alone. */
-    public void observeSweep(Map<String, Integer> totals) {
+    public void observeSweep(Map<String, ? extends Number> totals) {
         observeSweep(totals, 0);
     }
 
     /** Fold in what the janitor has deleted, by table, and how big the file is when that is known. */
-    public void observeSweep(Map<String, Integer> totals, long bytes) {
+    public void observeSweep(Map<String, ? extends Number> totals, long bytes) {
         for (String table : SWEPT_TABLES) {
-            raiseTo(rowsSwept, totals.getOrDefault(table, 0), siteId, table);
+            raiseTo(rowsSwept, count(totals, table), siteId, table);
         }
         if (bytes != 0) {
             databaseBytes.set(bytes, siteId);
@@ -199,6 +199,12 @@ public final class Metrics implements FleetPoller.ResultHook {
     /** One per machine sample by name, empty when there is no such series. Used by the tests and the health page. */
     public OptionalDouble value(String name, String printerId) {
         return registry.sampleValue(name, Map.of("site", siteId, "printer", printerId));
+    }
+
+    /** One count out of a stats map, nought when it is not there. */
+    private static long count(Map<String, ? extends Number> stats, String name) {
+        Number found = stats.get(name);
+        return found == null ? 0 : found.longValue();
     }
 
     /**

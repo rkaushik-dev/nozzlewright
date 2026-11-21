@@ -90,6 +90,11 @@ public final class FleetPoller {
         return new Builder(registry, provider);
     }
 
+    /** How the interval moves with what a machine is doing; empty when it stays fixed. */
+    public Optional<Cadence> cadence() {
+        return cadence;
+    }
+
     /** True between start and stop. */
     public boolean running() {
         return running;
