@@ -239,8 +239,8 @@ public class ApiErrors {
             for (JsonMappingException.Reference step : mismatch.getPath()) {
                 loc.add(step.getFieldName() != null ? step.getFieldName() : step.getIndex());
             }
-            return new RequestRejected.Problem(
-                    "type_error", loc, "Input should be a valid " + kind(mismatch.getTargetType()));
+            String kind = kind(mismatch.getTargetType());
+            return new RequestRejected.Problem(typeName(kind), loc, "Input should be a valid " + kind);
         }
         if (cause instanceof JsonMappingException) {
             return new RequestRejected.Problem(
@@ -268,6 +268,15 @@ public class ApiErrors {
             return "list";
         }
         return type.getSimpleName().toLowerCase(Locale.ROOT);
+    }
+
+    /** The short name an error type goes by: {@code string_type}, {@code int_type}, {@code bool_type}. */
+    private static String typeName(String kind) {
+        return switch (kind) {
+            case "integer" -> "int_type";
+            case "boolean" -> "bool_type";
+            default -> kind + "_type";
+        };
     }
 
     private static String typeOf(String code, String message) {

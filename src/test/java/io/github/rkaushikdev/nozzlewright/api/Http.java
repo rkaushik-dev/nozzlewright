@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 
 /**
  * A client for the API's parts, without a server: what the gateway would answer over HTTP, for one
@@ -58,7 +59,7 @@ final class Http {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(api.routes().toArray())
                 .setControllerAdvice(api.errors())
                 .addInterceptors(api.keyCheck())
-                .setCustomArgumentResolvers(api.paging())
+                .setCustomArgumentResolvers(api.resolvers().toArray(HandlerMethodArgumentResolver[]::new))
                 .setMessageConverters(
                         new StringHttpMessageConverter(StandardCharsets.UTF_8),
                         new MappingJackson2HttpMessageConverter(JSON))

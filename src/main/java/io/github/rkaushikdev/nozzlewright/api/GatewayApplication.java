@@ -82,7 +82,7 @@ public class GatewayApplication {
 
             @Override
             public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
-                resolvers.add(api.paging());
+                resolvers.addAll(api.resolvers());
             }
         };
     }
