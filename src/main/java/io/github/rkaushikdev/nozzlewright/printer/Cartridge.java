@@ -1,6 +1,7 @@
 package io.github.rkaushikdev.nozzlewright.printer;
 
 import io.github.rkaushikdev.nozzlewright.ConfigError;
+import io.github.rkaushikdev.nozzlewright.util.Quotients;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 
@@ -136,7 +137,7 @@ public final class Cartridge {
             throw new ConfigError("drops_per_label", dropsPerLabel, "a label throws at least one drop");
         }
         double dropsLeft = remainingMl() * InkLedger.PICOLITRES_PER_ML / dropVolumePl;
-        return (long) floorDivide(dropsLeft, dropsPerLabel);
+        return (long) Quotients.floor(dropsLeft, dropsPerLabel);
     }
 
     /** Record a full purge and return what it cost in drops. */
@@ -169,23 +170,6 @@ public final class Cartridge {
         if (dropVolumePl <= 0) {
             throw new ConfigError("cartridge.drop_volume_pl", dropVolumePl, "drop volume must be positive");
         }
-    }
-
-    /**
-     * The floor of {@code dividend / divisor}, worked from the remainder so a quotient a hair under
-     * a whole number is not rounded up into it.
-     */
-    private static double floorDivide(double dividend, double divisor) {
-        double remainder = dividend % divisor;
-        double quotient = (dividend - remainder) / divisor;
-        if (remainder != 0.0 && (divisor < 0) != (remainder < 0)) {
-            quotient -= 1.0;
-        }
-        double floored = Math.floor(quotient);
-        if (quotient - floored > 0.5) {
-            floored += 1.0;
-        }
-        return floored;
     }
 
     @Override
