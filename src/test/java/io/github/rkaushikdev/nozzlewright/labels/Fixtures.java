@@ -14,6 +14,13 @@ final class Fixtures {
         return Arrays.stream(values).mapToObj(BigInteger::valueOf).toList();
     }
 
+    /** A store holding the standard family built from the stock 5x7. */
+    static FontStore standardFonts() {
+        FontStore fonts = new FontStore();
+        FontOps.registerStandardFamily(fonts, FontData.FIVE_BY_SEVEN);
+        return fonts;
+    }
+
     /** A matrix drawn from hash and dot rows, top first. */
     static DotMatrix built(String... rows) {
         DotMatrix matrix = new DotMatrix(rows.length, rows[0].length());
