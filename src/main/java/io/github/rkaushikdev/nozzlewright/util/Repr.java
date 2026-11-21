@@ -84,13 +84,32 @@ public final class Repr {
     /**
      * The plain text form of a value: strings as they are, everything else in its quoted form.
      *
-     * <p>This is what a value reads as when it is dropped into a sentence rather than quoted.
+     * <p>This is what a value reads as when it is dropped into a sentence rather than quoted: a point
+     * in time as {@code 2025-03-17 08:00:00+00:00}, a local date and time as {@code 2025-03-17
+     * 08:00:00}, a clock time as {@code 06:00:00}.
      */
     public static String text(Object value) {
         if (value instanceof CharSequence text) {
             return text.toString();
         }
+        if (value instanceof java.time.Instant moment) {
+            return Times.text(moment);
+        }
+        if (value instanceof java.time.LocalDateTime local) {
+            return local.toLocalDate() + " " + clock(local.toLocalTime());
+        }
+        if (value instanceof java.time.LocalTime time) {
+            return clock(time);
+        }
         return of(value);
+    }
+
+    /** A clock time as {@code 06:00:00}, with microseconds only when there are some. */
+    private static String clock(java.time.LocalTime time) {
+        String whole = String.format(
+                java.util.Locale.ROOT, "%02d:%02d:%02d", time.getHour(), time.getMinute(), time.getSecond());
+        int micros = time.getNano() / 1000;
+        return micros == 0 ? whole : whole + String.format(java.util.Locale.ROOT, ".%06d", micros);
     }
 
     /** A string in quotes: single quotes unless it holds one and no double quote. */
