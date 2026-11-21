@@ -1,0 +1,7 @@
+#!/bin/sh
+# Runs the nozzlewright command line from an installed build:
+#   /opt/nozzlewright/bin/nozzlewright   this script
+#   /opt/nozzlewright/lib/nozzlewright.jar
+# Extra JVM options go in JAVA_OPTS.
+here=$(dirname "$0")
+exec "${JAVA:-java}" ${JAVA_OPTS:-} -jar "$here/../lib/nozzlewright.jar" "$@"
