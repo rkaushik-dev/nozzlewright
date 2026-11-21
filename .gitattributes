@@ -1,5 +1,6 @@
-# Line endings are LF everywhere. Two of these files were rewritten wholesale
-# by an editor on Windows before this existed, which made a three line change
-# look like a three hundred line one.
+# Line endings are LF everywhere except the Windows wrapper script.
 * text=auto eol=lf
+mvnw text eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
 *.png binary
