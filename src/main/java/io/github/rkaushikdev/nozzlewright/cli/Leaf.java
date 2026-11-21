@@ -1,6 +1,11 @@
 package io.github.rkaushikdev.nozzlewright.cli;
 
+import java.io.IOException;
 import java.io.PrintWriter;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Locale;
 import java.util.concurrent.Callable;
 import picocli.CommandLine;
@@ -35,6 +40,36 @@ abstract class Leaf implements Callable<Integer> {
     /** Where refusals go. */
     PrintWriter err() {
         return main().terminal().err();
+    }
+
+    /**
+     * The text of a file named on the command line.
+     *
+     * @throws CommandFailed when it cannot be read
+     */
+    static String readText(Path path) {
+        try {
+            return Files.readString(path, StandardCharsets.UTF_8);
+        } catch (IOException error) {
+            throw Output.fail("cannot read " + path + ": " + error.getMessage());
+        }
+    }
+
+    /**
+     * Write a file the command was told to write, making its directory first.
+     *
+     * @throws UncheckedIOException when it cannot be written
+     */
+    static void writeText(Path path, String text) {
+        try {
+            Path parent = path.toAbsolutePath().getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Files.writeString(path, text, StandardCharsets.UTF_8);
+        } catch (IOException error) {
+            throw new UncheckedIOException(error);
+        }
     }
 
     /**

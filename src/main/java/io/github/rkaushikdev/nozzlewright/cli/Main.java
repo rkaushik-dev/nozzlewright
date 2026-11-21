@@ -34,6 +34,8 @@ import picocli.CommandLine.Option;
         description = "Fleet control for Halvex coding printers.",
         subcommands = {
             RegistryCommands.class,
+            PrinterCommands.class,
+            LabelCommands.class,
             DbCommands.class,
             KeyCommands.class,
             Main.Install.class,
