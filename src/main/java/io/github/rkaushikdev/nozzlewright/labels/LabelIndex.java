@@ -14,8 +14,8 @@ import java.util.TreeMap;
  * The text of the label store's {@code index.json}.
  *
  * <p>The file is written in one fixed form: two space indentation, keys sorted, every character
- * outside printable ASCII escaped as {@code \}{@code uXXXX} in lower case hex, and a closing line
- * feed. An index written by an earlier build of the handheld reads back the same.
+ * outside printable ASCII escaped as a backslash, a {@code u} and four lower case hex digits, and a
+ * closing line feed. An index written by an earlier build of the handheld reads back the same.
  */
 final class LabelIndex {
 
