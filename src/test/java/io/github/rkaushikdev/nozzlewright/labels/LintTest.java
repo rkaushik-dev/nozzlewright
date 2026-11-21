@@ -2,10 +2,12 @@ package io.github.rkaushikdev.nozzlewright.labels;
 
 import static io.github.rkaushikdev.nozzlewright.labels.Fixtures.standardFonts;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.rkaushikdev.nozzlewright.printer.GroupGeometry;
 import io.github.rkaushikdev.nozzlewright.printer.HeadGeometry;
 import io.github.rkaushikdev.nozzlewright.printer.PenGeometry;
+import io.github.rkaushikdev.nozzlewright.smoke.Smoke;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -217,5 +219,20 @@ class LintTest {
     @ValueSource(ints = {150, 300, 600})
     void theCheckRunsAtEveryFiringRate(int dpi) {
         assertThat(check(GOOD, head(2, dpi)).ok()).isTrue();
+    }
+
+    /** The smoke runner is run on its own by the build and on site, so it has to load without a fuss. */
+    @Test
+    void theSmokeScriptIsImportable() {
+        assertThat(Smoke.KEY).isNotEmpty();
+        assertThat(Smoke.CARTON).startsWith("LABEL carton");
+    }
+
+    @Test
+    void theSmokeScriptFailsLoudly() {
+        Smoke.expect(true, "this one is fine");
+        assertThatThrownBy(() -> Smoke.expect(false, "this one is not"))
+                .isInstanceOf(Smoke.Failed.class)
+                .hasMessageContaining("this one is not");
     }
 }
