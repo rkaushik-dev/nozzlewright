@@ -27,7 +27,7 @@ import picocli.CommandLine.Option;
  *
  * <p>The exit code is the answer: nought when it worked, one when a command refused or a machine
  * said no (the reason on standard error, never a stack trace), two when the arguments were wrong.
- * No command starts the HTTP service; each one opens what it needs and closes it.
+ * Only {@code serve} starts the HTTP service; every other command opens what it needs and closes it.
  */
 @Command(
         name = "nozzlewright",
@@ -36,11 +36,13 @@ import picocli.CommandLine.Option;
             RegistryCommands.class,
             PrinterCommands.class,
             LabelCommands.class,
+            ServeCommand.class,
             DbCommands.class,
             FleetCommands.class,
             ProfileCommands.class,
             KeyCommands.class,
             Main.Install.class,
+            DoctorCommand.class,
             Main.Version.class
         })
 public final class Main {
