@@ -39,7 +39,8 @@ public record Api(
                         new PrinterRoutes(services),
                         new LabelRoutes(services),
                         new FleetRoutes(services),
-                        new HistoryRoutes(services)),
+                        new HistoryRoutes(services),
+                        new OpsRoutes(services)),
                 new KeyCheck(services),
                 List.of(new PagingResolver(), new WindowResolver()),
                 new ApiErrors());
