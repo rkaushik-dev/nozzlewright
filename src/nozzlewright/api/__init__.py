@@ -1,1 +1,0 @@
-"""The gateway HTTP API."""

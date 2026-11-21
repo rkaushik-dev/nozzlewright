@@ -10,5 +10,3 @@ local/
 *.mv.db
 *.trace.db
 .env
-__pycache__/
-*.py[cod]
