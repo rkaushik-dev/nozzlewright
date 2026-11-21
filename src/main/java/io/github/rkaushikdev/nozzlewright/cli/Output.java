@@ -55,4 +55,12 @@ public final class Output {
         }
         out.flush();
     }
+
+    /**
+     * A refusal to throw from a command: the message goes to standard error and the command exits
+     * one.
+     */
+    public static CommandFailed fail(String message) {
+        return new CommandFailed(message);
+    }
 }
