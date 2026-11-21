@@ -108,10 +108,10 @@ public final class ScriptedPrinter implements Responder {
     @Override
     public byte[] respond(byte[] data) throws InterruptedException {
         String text = new String(Framing.stripChecksum(strip(data)), StandardCharsets.US_ASCII);
+        Duration wait = latency;
         synchronized (this) {
             seen.add(text);
         }
-        Duration wait = latency;
         if (!wait.isZero()) {
             Thread.sleep(wait);
         }

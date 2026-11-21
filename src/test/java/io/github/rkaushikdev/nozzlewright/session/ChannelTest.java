@@ -284,17 +284,22 @@ class ChannelTest {
     @Test
     void urgentCommandsGoFirst() throws Exception {
         Channel made = ready();
-        printer.latency(Duration.ofMillis(20));
+        // The first command stays on the wire until everything behind it is queued, so the order the
+        // worker picks is the queue's order and not the order the threads happened to start in.
+        printer.latency(Duration.ofMillis(500));
         List<CompletableFuture<Response>> sends = new ArrayList<>();
         sends.add(Concurrently.start(() -> made.send("STATUS")));
-        Thread.sleep(5);
+        for (int round = 0; round < 500 && printer.count("STATUS") == 0; round++) {
+            Thread.sleep(1);
+        }
+        printer.latency(Duration.ofMillis(20));
         for (int index = 0; index < 3; index++) {
             sends.add(Concurrently.start(() -> made.send("STATUS")));
         }
-        for (int round = 0; round < 100 && made.depth() < 3; round++) {
+        sends.add(Concurrently.start(() -> made.send("STOPPRINT")));
+        for (int round = 0; round < 500 && made.depth() < 4; round++) {
             Thread.sleep(1);
         }
-        sends.add(Concurrently.start(() -> made.send("STOPPRINT")));
         assertThat(Concurrently.gather(sends)).allMatch(Outcome::ok);
         List<String> verbs =
                 printer.seen().stream().map(line -> line.split(":", 2)[0]).toList();
