@@ -1,5 +1,11 @@
 # nozzlewright
 
+[![CI](https://github.com/rkaushik-dev/nozzlewright/actions/workflows/ci.yml/badge.svg)](https://github.com/rkaushik-dev/nozzlewright/actions/workflows/ci.yml)
+![Java 21](https://img.shields.io/badge/Java-21-007396)
+![Spring Boot 3.5](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F)
+![Maven](https://img.shields.io/badge/build-Maven-C71A36)
+![JUnit 5](https://img.shields.io/badge/tests-JUnit%205-25A162)
+
 Fleet control for Halvex thermal inkjet coding printers: the HVX4PEN and
 HVX8PEN heads, and the HVXDOD and HVXLCP machines that speak the same line protocol.
 
