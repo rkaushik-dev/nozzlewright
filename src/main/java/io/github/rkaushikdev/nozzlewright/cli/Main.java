@@ -37,6 +37,8 @@ import picocli.CommandLine.Option;
             PrinterCommands.class,
             LabelCommands.class,
             DbCommands.class,
+            FleetCommands.class,
+            ProfileCommands.class,
             KeyCommands.class,
             Main.Install.class,
             Main.Version.class
