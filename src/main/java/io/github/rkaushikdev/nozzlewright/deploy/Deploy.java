@@ -17,7 +17,8 @@ import java.util.TreeMap;
  * the state directory: a coding gateway that has been rooted can print anything on somebody's food
  * packaging. It always restarts, with a delay, because a gateway that gives up after three tries is
  * off on Monday morning. And the stop timeout is longer than the runtime's own shutdown grace, so
- * the service manager never sends the hard signal into the middle of a database write.
+ * the service manager never sends the hard signal into the middle of a database write. A clean stop
+ * on SIGTERM ends the JVM with status 143, which the unit counts as success.
  */
 public final class Deploy {
 
@@ -56,6 +57,8 @@ public final class Deploy {
                 "RestartSec=" + RESTART_DELAY_SECONDS,
                 "TimeoutStopSec=" + STOP_TIMEOUT_SECONDS,
                 "KillSignal=SIGTERM",
+                "# The JVM exits 143 after a clean stop on SIGTERM.",
+                "SuccessExitStatus=143",
                 "",
                 "# The gateway writes to one directory and reads the rest.",
                 "StateDirectory=nozzlewright",

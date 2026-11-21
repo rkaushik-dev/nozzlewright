@@ -157,8 +157,8 @@ class PackagingTest {
     static Optional<Element> child(Element parent, String name) {
         NodeList children = parent.getChildNodes();
         for (int index = 0; index < children.getLength(); index++) {
-            Node node = children.item(index);
-            if (node instanceof Element element && element.getTagName().equals(name)) {
+            Node item = children.item(index);
+            if (item instanceof Element element && element.getTagName().equals(name)) {
                 return Optional.of(element);
             }
         }

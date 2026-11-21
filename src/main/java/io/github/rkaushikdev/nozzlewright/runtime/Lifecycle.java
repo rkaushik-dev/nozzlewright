@@ -90,7 +90,13 @@ public final class Lifecycle {
         if (installSignals) {
             installSignalHandlers(shutdown, stopped, graceSeconds);
         }
-        start.run();
+        try {
+            start.run();
+        } catch (InterruptedException | RuntimeException failed) {
+            // Nothing was started, so nothing has to be waited for at exit.
+            stopped.countDown();
+            throw failed;
+        }
         try {
             return shutdown.await();
         } catch (InterruptedException cancelled) {
