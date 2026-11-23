@@ -2,6 +2,7 @@ package io.github.rkaushikdev.nozzlewright.labels;
 
 import io.github.rkaushikdev.nozzlewright.LabelError;
 import io.github.rkaushikdev.nozzlewright.printer.Axis;
+import io.github.rkaushikdev.nozzlewright.printer.Head;
 import io.github.rkaushikdev.nozzlewright.printer.HeadGeometry;
 import io.github.rkaushikdev.nozzlewright.util.Numbers;
 import io.github.rkaushikdev.nozzlewright.util.Repr;
@@ -185,6 +186,26 @@ public final class Lint {
                 expiry.name(),
                 "a best before " + days + " days out has to show " + needs + ", " + Repr.of(expiry.pattern())
                         + " does not"));
+    }
+
+    /**
+     * Whether a line running at {@code lineSpeedMmPerMin} outruns the head.
+     *
+     * <p>A stop, because past the refire ceiling the board drops columns and every code comes out with
+     * gaps in it. High frequency firing raises the ceiling, so it is named when it would be enough.
+     */
+    public static List<Finding> checkLineSpeed(HeadGeometry head, double lineSpeedMmPerMin) {
+        double ceiling = Head.maxLineSpeedMmPerMin(head.horizontalDpi(), false);
+        if (lineSpeedMmPerMin <= ceiling) {
+            return List.of();
+        }
+        boolean highFireEnough = lineSpeedMmPerMin <= Head.maxLineSpeedMmPerMin(head.horizontalDpi(), true);
+        return List.of(new Finding(
+                Grade.STOP,
+                "head",
+                "at " + head.horizontalDpi() + " dpi the nozzles keep up to " + (long) Math.floor(ceiling)
+                        + " mm/min and the line runs at " + Numbers.fixed(lineSpeedMmPerMin, 0)
+                        + (highFireEnough ? ", high fire would keep up" : ", drop the dpi")));
     }
 
     /** Per element checks that do not need the message rendered. */

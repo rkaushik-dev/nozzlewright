@@ -18,7 +18,7 @@ public record Measurement(int columns, double measuredMm, int horizontalDpi) {
 
     /** How long the message should have been. */
     public double expectedMm() {
-        return columns * Head.MM_PER_INCH / horizontalDpi;
+        return Head.columnsToMm(columns, horizontalDpi);
     }
 
     /** Fractional error, positive when the print came out too long; nought when nothing was expected. */

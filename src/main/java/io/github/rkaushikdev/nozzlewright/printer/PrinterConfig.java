@@ -112,6 +112,14 @@ public record PrinterConfig(
         if (speedSource == SpeedSource.FIXED && autospeedMmPerMin <= 0) {
             throw new ConfigError("autospeed_mm_per_min", autospeedMmPerMin, "fixed speed needs a speed");
         }
+        double ceiling = maxLineSpeedMmPerMin();
+        if (speedSource == SpeedSource.FIXED && autospeedMmPerMin > ceiling) {
+            throw new ConfigError(
+                    "autospeed_mm_per_min",
+                    autospeedMmPerMin,
+                    "at " + head.horizontalDpi() + " dpi the nozzles keep up to " + (long) Math.floor(ceiling)
+                            + " mm/min" + (highFire ? "" : ", turn on high fire or drop the dpi"));
+        }
         if (printMode.needsEncoder() && encoder.isEmpty()) {
             throw new ConfigError(
                     "print_mode", printMode.value(), "this mode reads the encoder and no encoder is fitted");
@@ -125,6 +133,11 @@ public record PrinterConfig(
         if (repeatGapMm < 0) {
             throw new ConfigError("repeat_gap_mm", repeatGapMm, "a gap cannot be negative");
         }
+    }
+
+    /** The fastest this machine can code at its firing rate, high fire counted. */
+    public double maxLineSpeedMmPerMin() {
+        return Head.maxLineSpeedMmPerMin(head.horizontalDpi(), highFire);
     }
 
     /** What would have to change on this machine to look like {@code other}, in command order. */

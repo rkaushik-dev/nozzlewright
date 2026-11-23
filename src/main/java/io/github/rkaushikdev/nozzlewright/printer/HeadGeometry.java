@@ -117,7 +117,7 @@ public record HeadGeometry(String family, int horizontalDpi, int verticalDpi, Li
 
     /** Distance the product travels between two fired columns. */
     public double columnPitchMm() {
-        return Head.MM_PER_INCH / horizontalDpi;
+        return Head.columnPitchMm(horizontalDpi);
     }
 
     /**

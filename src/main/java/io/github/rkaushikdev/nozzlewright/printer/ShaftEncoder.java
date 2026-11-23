@@ -21,11 +21,8 @@ import io.github.rkaushikdev.nozzlewright.util.Numbers;
  */
 public record ShaftEncoder(int pulsesPerRev, int wheelMm, boolean reverse) {
 
-    /**
-     * The fastest a nozzle row can be refired without starving. Set by the ink, not by the
-     * electronics.
-     */
-    public static final int MAX_FIRE_HZ = 12_000;
+    /** The refire ceiling, see {@link Head#MAX_FIRE_HZ}. */
+    public static final int MAX_FIRE_HZ = Head.MAX_FIRE_HZ;
 
     private static final double SECONDS_PER_MINUTE = 60.0;
 
@@ -41,8 +38,7 @@ public record ShaftEncoder(int pulsesPerRev, int wheelMm, boolean reverse) {
 
     /** Encoder pulses between two fired columns. */
     public double pulsesPerColumn(int horizontalDpi) {
-        double columnPitchMm = Head.MM_PER_INCH / horizontalDpi;
-        return columnPitchMm / mmPerPulse();
+        return Head.columnPitchMm(horizontalDpi) / mmPerPulse();
     }
 
     /** The whole number divider the board loads, at least one. */
@@ -74,8 +70,7 @@ public record ShaftEncoder(int pulsesPerRev, int wheelMm, boolean reverse) {
 
     /** Fastest the line can run before the nozzles cannot keep up. */
     public double maxSpeedMmPerMin(int horizontalDpi) {
-        double columnPitchMm = Head.MM_PER_INCH / horizontalDpi;
-        return MAX_FIRE_HZ * columnPitchMm * SECONDS_PER_MINUTE;
+        return Head.maxLineSpeedMmPerMin(horizontalDpi, false);
     }
 
     /**

@@ -70,7 +70,7 @@ public record Proof(String name, DotMatrix matrix, int horizontalDpi, double dro
 
     /** How long the printed message is on the product. */
     public double widthMm() {
-        return widthDots() * Head.MM_PER_INCH / horizontalDpi;
+        return Head.columnsToMm(widthDots(), horizontalDpi);
     }
 
     /** How many nozzle firings one label costs. */

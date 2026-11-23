@@ -41,12 +41,12 @@ public record Photocell(int channel, PhotocellMode mode, int maskDots, int delay
 
     /** Distance between the trigger and the first column. */
     public double delayMm(int horizontalDpi) {
-        return delayDots * Head.MM_PER_INCH / horizontalDpi;
+        return Head.columnsToMm(delayDots, horizontalDpi);
     }
 
     /** Distance after the trigger where a second trigger is ignored. */
     public double maskMm(int horizontalDpi) {
-        return maskDots * Head.MM_PER_INCH / horizontalDpi;
+        return Head.columnsToMm(maskDots, horizontalDpi);
     }
 
     /**

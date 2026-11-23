@@ -69,8 +69,7 @@ public final class Calibration {
             throw new ConfigError("horizontal_dpi", horizontalDpi, "the firing rate is missing");
         }
 
-        double columnPitchMm = Head.MM_PER_INCH / horizontalDpi;
-        long wheelMm = Math.max(1, Math.min(Numbers.round(columnPitchMm * pulsesPerRev), 2000));
+        long wheelMm = Math.max(1, Math.min(Numbers.round(Head.columnPitchMm(horizontalDpi) * pulsesPerRev), 2000));
         ShaftEncoder suggested = new ShaftEncoder(pulsesPerRev, (int) wheelMm);
         suggested.validate();
         return suggested;

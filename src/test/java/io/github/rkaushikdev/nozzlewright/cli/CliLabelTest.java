@@ -114,6 +114,17 @@ class CliLabelTest {
     }
 
     @Test
+    void checkWithLintMeasuresTheLineSpeed() throws Exception {
+        Path source = write("coded.lbl", CODED);
+        Cli.Result fast = invoke(tmp, "label", "check", source.toString(), "--lint", "--line-speed", "80000");
+        assertThat(fast.exitCode()).isEqualTo(Main.REFUSED);
+        assertThat(fast.stdout()).contains("the nozzles keep up to 60960 mm/min and the line runs at 80000");
+        Cli.Result slower =
+                invoke(tmp, "label", "check", source.toString(), "--lint", "--line-speed", "80000", "--dpi", "150");
+        assertThat(slower.exitCode()).isZero();
+    }
+
+    @Test
     void checkWithLintPrintsJson() throws Exception {
         Path source = write("coded.lbl", CODED.replace("height=40", "height=12"));
         Cli.Result result = invoke(tmp, "label", "check", source.toString(), "--lint", "--json");

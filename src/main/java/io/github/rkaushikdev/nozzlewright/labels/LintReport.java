@@ -21,6 +21,13 @@ public record LintReport(String label, List<Finding> findings) {
         findings = List.copyOf(findings);
     }
 
+    /** The same report with {@code more} findings after the ones it has. */
+    public LintReport plus(List<Finding> more) {
+        List<Finding> all = new ArrayList<>(findings);
+        all.addAll(more);
+        return new LintReport(label, all);
+    }
+
     /** A report with nothing in it. */
     public LintReport(String label) {
         this(label, List.of());

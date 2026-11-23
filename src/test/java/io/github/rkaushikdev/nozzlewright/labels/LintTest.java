@@ -190,6 +190,27 @@ class LintTest {
     }
 
     @Test
+    void aLineTooFastForTheFiringRateIsAStop() {
+        List<Finding> findings = Lint.checkLineSpeed(head(), 65_000);
+        assertThat(findings).singleElement().satisfies(item -> {
+            assertThat(item.grade()).isEqualTo(Grade.STOP);
+            assertThat(item.message())
+                    .isEqualTo("at 300 dpi the nozzles keep up to 60960 mm/min and the line runs at 65000,"
+                            + " high fire would keep up");
+        });
+        assertThat(Lint.checkLineSpeed(head(), 95_000).get(0).message()).endsWith(", drop the dpi");
+        assertThat(Lint.checkLineSpeed(head(), 60_000)).isEmpty();
+        assertThat(Lint.checkLineSpeed(head(2, 150), 95_000)).isEmpty();
+    }
+
+    @Test
+    void aReportTakesMoreFindings() {
+        LintReport report = check(GOOD).plus(List.of(new Finding(Grade.STOP, "head", "too fast")));
+        assertThat(report.ok()).isFalse();
+        assertThat(report.findings()).last().isEqualTo(new Finding(Grade.STOP, "head", "too fast"));
+    }
+
+    @Test
     void gradesThatBlock() {
         assertThat(Grade.STOP.blocks()).isTrue();
         assertThat(Grade.WARN.blocks()).isFalse();

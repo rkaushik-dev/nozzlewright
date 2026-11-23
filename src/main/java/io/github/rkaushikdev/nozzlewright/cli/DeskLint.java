@@ -26,6 +26,13 @@ final class DeskLint {
     @Option(names = "--dpi", defaultValue = "300", description = "Firing rate along the product, for --lint.")
     int dpi;
 
+    @Option(
+            names = "--line-speed",
+            defaultValue = "0",
+            paramLabel = "MM_PER_MIN",
+            description = "Line speed to check the firing rate against, for --lint.")
+    double lineSpeed;
+
     @Option(names = "--at", defaultValue = "", description = "Render dates as if it were this moment.")
     String at;
 
@@ -36,7 +43,8 @@ final class DeskLint {
     LintReport check(LabelTemplate template) {
         HeadGeometry head = HeadGeometry.stacked(HeadGeometry.DESK_FAMILY, pens, dpi);
         head.validate();
-        return Lint.check(
+        LintReport report = Lint.check(
                 template, FontStore.stock(), head, LabelCommands.whenOrNow(at), LabelCommands.prompts(answer));
+        return lineSpeed > 0 ? report.plus(Lint.checkLineSpeed(head, lineSpeed)) : report;
     }
 }

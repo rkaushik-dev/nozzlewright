@@ -2,6 +2,7 @@ package io.github.rkaushikdev.nozzlewright.printer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 import io.github.rkaushikdev.nozzlewright.ConfigError;
 import java.util.ArrayList;
@@ -120,6 +121,46 @@ class PrinterConfigTest {
                 .autospeedMmPerMin(24_000)
                 .build()
                 .validate();
+    }
+
+    static PrinterConfig.Builder fixedAt(int mmPerMin) {
+        return base().noEncoder()
+                .speedSource(SpeedSource.FIXED)
+                .printMode(PrintMode.DRIVER)
+                .autospeedMmPerMin(mmPerMin);
+    }
+
+    @Test
+    void aFixedSpeedPastTheRefireCeilingIsRefused() {
+        PrinterConfig broken = fixedAt(70_000).build();
+        assertThatThrownBy(broken::validate)
+                .isInstanceOf(ConfigError.class)
+                .hasMessageContaining(
+                        "at 300 dpi the nozzles keep up to 60960 mm/min, turn on high fire or drop the dpi");
+    }
+
+    @Test
+    void highFireRaisesTheCeiling() {
+        fixedAt(70_000).highFire(true).build().validate();
+        PrinterConfig tooFast = fixedAt(100_000).highFire(true).build();
+        assertThatThrownBy(tooFast::validate)
+                .isInstanceOf(ConfigError.class)
+                .hasMessageEndingWith("keep up to 91440 mm/min");
+    }
+
+    @Test
+    void halvingTheDpiDoublesTheCeiling() {
+        PrinterConfig at600 =
+                fixedAt(40_000).head(head().withHorizontalDpi(600)).build();
+        assertThatThrownBy(at600::validate).isInstanceOf(ConfigError.class);
+        fixedAt(40_000).head(head().withHorizontalDpi(150)).build().validate();
+        assertThat(fixedAt(1).head(head().withHorizontalDpi(150)).build().maxLineSpeedMmPerMin())
+                .isCloseTo(121_920.0, within(1e-6));
+    }
+
+    @Test
+    void anEncoderSpeedIsNotCheckedAgainstTheCeiling() {
+        base().autospeedMmPerMin(200_000).build().validate();
     }
 
     @Test
