@@ -48,6 +48,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -56,6 +57,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeSet;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -586,20 +588,12 @@ final class FleetCommands extends Group {
     @Command(name = "export", description = "Write rows out as CSV.")
     static final class ExportCommand extends Windowed {
 
-        /** One table's writer. */
-        @FunctionalInterface
-        private interface TableWriter {
-            int write(UnitOfWork unit, Writer out, Instant start, Instant end, String printerId);
-        }
-
-        private static final Map<String, TableWriter> WRITERS = writers();
-
         @Parameters(
                 index = "0",
                 arity = "0..1",
                 defaultValue = "samples",
                 paramLabel = "WHAT",
-                description = "samples, runs or alarms.")
+                description = "samples, runs, alarms, or trace for the cartridges behind each run.")
         private String what;
 
         @Option(names = "--out", description = "Write here instead of to standard output.")
@@ -608,25 +602,18 @@ final class FleetCommands extends Group {
         @Option(names = "--printer-id", defaultValue = "", description = "Only this machine.")
         private String printerId;
 
-        private static Map<String, TableWriter> writers() {
-            Map<String, TableWriter> found = new LinkedHashMap<>();
-            found.put("samples", Export::writeSamples);
-            found.put("runs", Export::writeJobs);
-            found.put("alarms", Export::writeAlarms);
-            return found;
-        }
-
         @Override
         public Integer call() {
             Context context = context();
             Window window = window(context);
-            TableWriter writer = WRITERS.get(what.strip().toLowerCase(Locale.ROOT));
-            if (writer == null) {
-                throw Output.fail(
-                        Repr.of(what) + " is not one of " + String.join(", ", new TreeSet<>(WRITERS.keySet())));
-            }
+            Export.Table table = Export.Table.parse(what)
+                    .orElseThrow(() -> Output.fail(Repr.of(what) + " is not one of "
+                            + Arrays.stream(Export.Table.values())
+                                    .map(Export.Table::word)
+                                    .sorted()
+                                    .collect(Collectors.joining(", "))));
             if (target == null) {
-                reading(context, unit -> writer.write(unit, out(), window.start(), window.end(), printerId));
+                reading(context, unit -> Export.write(table, unit, out(), window.start(), window.end(), printerId));
                 out().flush();
                 return Main.OK;
             }
@@ -637,8 +624,8 @@ final class FleetCommands extends Group {
                     Files.createDirectories(parent);
                 }
                 try (Writer file = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
-                    written =
-                            reading(context, unit -> writer.write(unit, file, window.start(), window.end(), printerId));
+                    written = reading(
+                            context, unit -> Export.write(table, unit, file, window.start(), window.end(), printerId));
                 }
             } catch (IOException error) {
                 throw new UncheckedIOException(error);

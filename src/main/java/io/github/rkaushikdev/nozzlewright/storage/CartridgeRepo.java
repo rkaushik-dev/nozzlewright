@@ -77,6 +77,16 @@ public final class CartridgeRepo {
                 .getResultList();
     }
 
+    /** Every fitting one machine has had, open or closed, by pen and then oldest first. */
+    public List<CartridgeFitting> allFittings(Printer printer) {
+        return unit.entities()
+                .createQuery(
+                        "select f from CartridgeFitting f where f.printerPk = :pk order by f.pen, f.fittedAt, f.id",
+                        CartridgeFitting.class)
+                .setParameter("pk", printer.getId())
+                .getResultList();
+    }
+
     /** Everywhere one cartridge has been, oldest fitting first. */
     public List<CartridgeFitting> history(String serial) {
         return unit.entities()

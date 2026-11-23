@@ -313,6 +313,31 @@ class CliFleetTest {
     }
 
     @Test
+    void exportingTheCartridgeTrace() {
+        seed();
+        try (Database database = Database.file(tmp.resolve(Context.DATABASE_NAME))) {
+            database.run(unit -> {
+                Printer line4 = new PrinterRepo(unit).require("line4");
+                new CartridgeRepo(unit).observe(line4, List.of(new InkReading(1, 90, "M1", "HVX-42", "MEK")), START);
+            });
+        }
+        Cli.Result result = invoke(
+                tmp,
+                "fleet",
+                "export",
+                "trace",
+                "--since",
+                "2025-04-10T06:00+00:00",
+                "--until",
+                "2025-04-10T14:00+00:00");
+        assertThat(result.exitCode()).isZero();
+        List<Map<String, String>> rows = csv(result.stdout());
+        assertThat(rows).singleElement().satisfies(row -> {
+            assertThat(row).containsEntry("label", "carton").containsEntry("serial", "M1");
+        });
+    }
+
+    @Test
     void exportingAlarms() {
         seed();
         Cli.Result result = invoke(
@@ -330,6 +355,8 @@ class CliFleetTest {
     @Test
     void exportingSomethingThatIsNotATable() {
         seed();
-        assertThat(invoke(tmp, "fleet", "export", "weather").exitCode()).isNotZero();
+        Cli.Result result = invoke(tmp, "fleet", "export", "weather");
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.stderr()).contains("'weather' is not one of alarms, runs, samples, trace");
     }
 }

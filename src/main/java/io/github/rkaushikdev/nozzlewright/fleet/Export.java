@@ -3,9 +3,10 @@ package io.github.rkaushikdev.nozzlewright.fleet;
 import io.github.rkaushikdev.nozzlewright.NozzlewrightError;
 import io.github.rkaushikdev.nozzlewright.storage.AlarmRecord;
 import io.github.rkaushikdev.nozzlewright.storage.AlarmRepo;
+import io.github.rkaushikdev.nozzlewright.storage.CartridgeFitting;
+import io.github.rkaushikdev.nozzlewright.storage.CartridgeRepo;
 import io.github.rkaushikdev.nozzlewright.storage.JobRepo;
 import io.github.rkaushikdev.nozzlewright.storage.JobRun;
-import io.github.rkaushikdev.nozzlewright.storage.PollSample;
 import io.github.rkaushikdev.nozzlewright.storage.Printer;
 import io.github.rkaushikdev.nozzlewright.storage.PrinterRepo;
 import io.github.rkaushikdev.nozzlewright.storage.SampleRepo;
@@ -17,14 +18,17 @@ import java.io.UncheckedIOException;
 import java.io.Writer;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * Getting the numbers out, as CSV.
@@ -73,48 +77,104 @@ public final class Export {
     public static final List<String> ALARM_COLUMNS =
             List.of("printer_id", "name", "severity", "raised_at", "cleared_at", "seen", "acknowledged_by");
 
+    /**
+     * The columns of a trace export, in order: one row for every cartridge that was in a machine at
+     * some point during a run on it.
+     */
+    public static final List<String> TRACE_COLUMNS = List.of(
+            "printer_id",
+            "label",
+            "label_revision",
+            "started_at",
+            "finished_at",
+            "printed",
+            "pen",
+            "serial",
+            "part_number",
+            "ink_family",
+            "fitted_at",
+            "removed_at");
+
     /** How many closed alarms per machine an export looks through. */
     private static final int ALARM_HISTORY = 5000;
 
+    /**
+     * One table a site can export: its name on the command line, its columns, and where its rows
+     * come from.
+     */
+    public enum Table {
+        SAMPLES("samples", SAMPLE_COLUMNS),
+        RUNS("runs", JOB_COLUMNS),
+        ALARMS("alarms", ALARM_COLUMNS),
+        TRACE("trace", TRACE_COLUMNS);
+
+        private final String word;
+        private final List<String> columns;
+
+        Table(String word, List<String> columns) {
+            this.word = word;
+            this.columns = columns;
+        }
+
+        /** The name the command line uses. */
+        public String word() {
+            return word;
+        }
+
+        /** The header row. */
+        public List<String> columns() {
+            return columns;
+        }
+
+        /** The table a word names, matched without regard to case or surrounding space. */
+        public static Optional<Table> parse(String text) {
+            String wanted = text.strip().toLowerCase(Locale.ROOT);
+            return Arrays.stream(values())
+                    .filter(item -> item.word.equals(wanted))
+                    .findFirst();
+        }
+
+        /** Rows inside the window for the machines {@code names}, in the order the file carries them. */
+        private Stream<List<String>> rows(UnitOfWork unit, Instant start, Instant end, List<String> names) {
+            return switch (this) {
+                case SAMPLES -> sampleRows(unit, start, end, names);
+                case RUNS -> runs(unit, start, end, names).map(Export::runRow);
+                case ALARMS -> alarmRows(unit, start, end, names);
+                case TRACE -> traceRows(unit, start, end, names);
+            };
+        }
+    }
+
     private Export() {}
+
+    /**
+     * Write one table's rows inside the window, both ends included; an empty {@code printerId} means
+     * every machine. Rows go out as they are read.
+     *
+     * @return how many rows went out, the header not counted
+     * @throws NozzlewrightError when the window does not end after it starts, or the machine named is
+     *     not in the database
+     */
+    public static int write(Table table, UnitOfWork unit, Writer out, Instant start, Instant end, String printerId) {
+        check(start, end);
+        List<String> names = names(unit, printerId);
+        row(out, table.columns());
+        int[] written = {0};
+        table.rows(unit, start, end, names).forEach(cells -> {
+            row(out, cells);
+            written[0]++;
+        });
+        return written[0];
+    }
 
     /** Write every machine's poll readings inside the window and return how many rows went out. */
     public static int writeSamples(UnitOfWork unit, Writer out, Instant start, Instant end) {
         return writeSamples(unit, out, start, end, "");
     }
 
-    /**
-     * Write poll readings taken inside the window, both ends included, machine by machine in id order
-     * and oldest first within each; an empty {@code printerId} means every machine.
-     *
-     * @return how many rows went out, the header not counted
-     * @throws NozzlewrightError when the window does not end after it starts, or the machine named is
-     *     not in the database
-     */
+    /** Poll readings, machine by machine in id order and oldest first within each. */
     public static int writeSamples(UnitOfWork unit, Writer out, Instant start, Instant end, String printerId) {
-        check(start, end);
-        row(out, SAMPLE_COLUMNS);
-        SampleRepo repo = new SampleRepo(unit);
-        int written = 0;
-        for (String name : names(unit, printerId)) {
-            for (PollSample sample : repo.between(name, start, end)) {
-                row(
-                        out,
-                        List.of(
-                                name,
-                                Times.iso(sample.getAt()),
-                                sample.isReachable() ? "1" : "0",
-                                sample.getState(),
-                                String.valueOf(sample.getAlarms()),
-                                String.valueOf(sample.getPrinted()),
-                                real(sample.getHeadTemperatureC()),
-                                real(sample.getLineSpeedMmPerMin()),
-                                Numbers.shortest(Numbers.round(sample.getDurationSeconds(), 4)),
-                                sample.getError()));
-                written++;
-            }
-        }
-        return written;
+        return write(Table.SAMPLES, unit, out, start, end, printerId);
     }
 
     /** Write every machine's print runs inside the window and return how many rows went out. */
@@ -122,45 +182,9 @@ public final class Export {
         return writeJobs(unit, out, start, end, "");
     }
 
-    /**
-     * Write print runs that started inside the window, both ends included, oldest first across the
-     * site; an empty {@code printerId} means every machine.
-     *
-     * @return how many rows went out, the header not counted
-     * @throws NozzlewrightError when the window does not end after it starts, or the machine named is
-     *     not in the database
-     */
+    /** Print runs that started inside the window, oldest first across the site. */
     public static int writeJobs(UnitOfWork unit, Writer out, Instant start, Instant end, String printerId) {
-        check(start, end);
-        row(out, JOB_COLUMNS);
-        Set<String> wanted = new HashSet<>(names(unit, printerId));
-        Map<Integer, String> lookup = new HashMap<>();
-        for (Printer printer : new PrinterRepo(unit).all()) {
-            lookup.put(printer.getId(), printer.getPrinterId());
-        }
-        int written = 0;
-        for (JobRun run : new JobRepo(unit).between(start, end)) {
-            String name = lookup.getOrDefault(run.getPrinterPk(), "");
-            if (!wanted.contains(name)) {
-                continue;
-            }
-            row(
-                    out,
-                    List.of(
-                            name,
-                            run.getLabel(),
-                            String.valueOf(run.getLabelRevision()),
-                            run.getOutcome(),
-                            String.valueOf(run.getTarget()),
-                            String.valueOf(run.getPrinted()),
-                            Times.iso(run.getStartedAt()),
-                            stamp(run.getFinishedAt()),
-                            Numbers.shortest(Numbers.round(run.getElapsedSeconds(), 3)),
-                            run.getOperator(),
-                            run.getDetail()));
-            written++;
-        }
-        return written;
+        return write(Table.RUNS, unit, out, start, end, printerId);
     }
 
     /** Write every machine's alarms raised inside the window and return how many rows went out. */
@@ -168,41 +192,122 @@ public final class Export {
         return writeAlarms(unit, out, start, end, "");
     }
 
-    /**
-     * Write alarms raised inside the window, both ends included, open or cleared, machine by machine
-     * in id order and oldest first within each; an empty {@code printerId} means every machine.
-     *
-     * @return how many rows went out, the header not counted
-     * @throws NozzlewrightError when the window does not end after it starts, or the machine named is
-     *     not in the database
-     */
+    /** Alarms raised inside the window, open or cleared, machine by machine and oldest first. */
     public static int writeAlarms(UnitOfWork unit, Writer out, Instant start, Instant end, String printerId) {
-        check(start, end);
-        row(out, ALARM_COLUMNS);
+        return write(Table.ALARMS, unit, out, start, end, printerId);
+    }
+
+    private static Stream<List<String>> sampleRows(UnitOfWork unit, Instant start, Instant end, List<String> names) {
+        SampleRepo repo = new SampleRepo(unit);
+        return names.stream().flatMap(name -> repo.between(name, start, end).stream()
+                .map(sample -> List.of(
+                        name,
+                        Times.iso(sample.getAt()),
+                        sample.isReachable() ? "1" : "0",
+                        sample.getState(),
+                        String.valueOf(sample.getAlarms()),
+                        String.valueOf(sample.getPrinted()),
+                        real(sample.getHeadTemperatureC()),
+                        real(sample.getLineSpeedMmPerMin()),
+                        Numbers.shortest(Numbers.round(sample.getDurationSeconds(), 4)),
+                        sample.getError())));
+    }
+
+    /** A run and the machine it ran on. */
+    private record NamedRun(String printerId, JobRun run) {}
+
+    /** Runs that started inside the window on the machines named, oldest first. */
+    private static Stream<NamedRun> runs(UnitOfWork unit, Instant start, Instant end, List<String> names) {
+        Set<String> wanted = new HashSet<>(names);
+        Map<Integer, String> lookup = printerIds(unit);
+        return new JobRepo(unit)
+                .between(start, end).stream()
+                        .map(run -> new NamedRun(lookup.getOrDefault(run.getPrinterPk(), ""), run))
+                        .filter(item -> wanted.contains(item.printerId()));
+    }
+
+    private static List<String> runRow(NamedRun item) {
+        JobRun run = item.run();
+        return List.of(
+                item.printerId(),
+                run.getLabel(),
+                String.valueOf(run.getLabelRevision()),
+                run.getOutcome(),
+                String.valueOf(run.getTarget()),
+                String.valueOf(run.getPrinted()),
+                Times.iso(run.getStartedAt()),
+                stamp(run.getFinishedAt()),
+                Numbers.shortest(Numbers.round(run.getElapsedSeconds(), 3)),
+                run.getOperator(),
+                run.getDetail());
+    }
+
+    private static Stream<List<String>> alarmRows(UnitOfWork unit, Instant start, Instant end, List<String> names) {
         AlarmRepo repo = new AlarmRepo(unit);
-        int written = 0;
-        for (String name : names(unit, printerId)) {
+        return names.stream().flatMap(name -> {
             List<AlarmRecord> rows = new ArrayList<>(repo.history(name, ALARM_HISTORY));
             rows.addAll(repo.active(name));
             rows.sort(Comparator.comparing(AlarmRecord::getRaisedAt));
-            for (AlarmRecord alarm : rows) {
-                if (alarm.getRaisedAt().isBefore(start) || alarm.getRaisedAt().isAfter(end)) {
-                    continue;
-                }
-                row(
-                        out,
-                        List.of(
-                                name,
-                                alarm.getName(),
-                                alarm.getSeverity(),
-                                Times.iso(alarm.getRaisedAt()),
-                                stamp(alarm.getClearedAt()),
-                                String.valueOf(alarm.getSeen()),
-                                alarm.getAcknowledgedBy()));
-                written++;
-            }
+            return rows.stream()
+                    .filter(alarm -> !alarm.getRaisedAt().isBefore(start)
+                            && !alarm.getRaisedAt().isAfter(end))
+                    .map(alarm -> List.of(
+                            name,
+                            alarm.getName(),
+                            alarm.getSeverity(),
+                            Times.iso(alarm.getRaisedAt()),
+                            stamp(alarm.getClearedAt()),
+                            String.valueOf(alarm.getSeen()),
+                            alarm.getAcknowledgedBy()));
+        });
+    }
+
+    /**
+     * Every cartridge in the machine during each run that started inside the window, run by run and
+     * pen by pen.
+     *
+     * <p>This is the export a quality department asks for on the morning of a recall: a carton code
+     * names a run, and the run names the cartridges whose ink is on the carton. A cartridge counts
+     * when it went in before the run finished and came out after it started, so a swap in the middle
+     * of a run puts both cartridges on the list, which is the honest answer. A run still going counts
+     * as running until now.
+     */
+    private static Stream<List<String>> traceRows(UnitOfWork unit, Instant start, Instant end, List<String> names) {
+        Map<Integer, List<CartridgeFitting>> fitted = new HashMap<>();
+        for (Printer printer : new PrinterRepo(unit).all()) {
+            fitted.put(printer.getId(), new CartridgeRepo(unit).allFittings(printer));
         }
-        return written;
+        Instant now = Times.now();
+        return runs(unit, start, end, names).flatMap(item -> {
+            JobRun run = item.run();
+            Instant finished = run.getFinishedAt().orElse(now);
+            return fitted.getOrDefault(run.getPrinterPk(), List.of()).stream()
+                    .filter(row -> !row.getFittedAt().isAfter(finished)
+                            && row.getRemovedAt()
+                                    .map(out -> !out.isBefore(run.getStartedAt()))
+                                    .orElse(true))
+                    .map(row -> List.of(
+                            item.printerId(),
+                            run.getLabel(),
+                            String.valueOf(run.getLabelRevision()),
+                            Times.iso(run.getStartedAt()),
+                            stamp(run.getFinishedAt()),
+                            String.valueOf(run.getPrinted()),
+                            String.valueOf(row.getPen()),
+                            row.getSerial(),
+                            row.getPartNumber(),
+                            row.getInkFamily(),
+                            Times.iso(row.getFittedAt()),
+                            stamp(row.getRemovedAt())));
+        });
+    }
+
+    private static Map<Integer, String> printerIds(UnitOfWork unit) {
+        Map<Integer, String> lookup = new HashMap<>();
+        for (Printer printer : new PrinterRepo(unit).all()) {
+            lookup.put(printer.getId(), printer.getPrinterId());
+        }
+        return lookup;
     }
 
     private static void check(Instant start, Instant end) {

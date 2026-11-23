@@ -5,11 +5,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.rkaushikdev.nozzlewright.NozzlewrightError;
 import io.github.rkaushikdev.nozzlewright.printer.Alarms;
+import io.github.rkaushikdev.nozzlewright.printer.InkReading;
 import io.github.rkaushikdev.nozzlewright.printer.JobOutcome;
 import io.github.rkaushikdev.nozzlewright.printer.JobResult;
 import io.github.rkaushikdev.nozzlewright.printer.MachineState;
 import io.github.rkaushikdev.nozzlewright.printer.PrinterStatus;
 import io.github.rkaushikdev.nozzlewright.storage.AlarmRepo;
+import io.github.rkaushikdev.nozzlewright.storage.CartridgeRepo;
 import io.github.rkaushikdev.nozzlewright.storage.Database;
 import io.github.rkaushikdev.nozzlewright.storage.JobRepo;
 import io.github.rkaushikdev.nozzlewright.storage.Printer;
@@ -84,6 +86,69 @@ class ExportTest {
         samples.record(line4, reading("line4", true), END.plus(Duration.ofDays(1)));
         new JobRepo(unit).record(line4, run(), RunDetails.none().withStartedAt(hoursIn(3)));
         new AlarmRepo(unit).open(line4, "INK_LOW", "warning", hoursIn(4));
+    }
+
+    static InkReading ink(int pen, String serial) {
+        return new InkReading(pen, 80, serial, "HVX-42", "WATER");
+    }
+
+    /** A run from hour three to hour four, with a cartridge swapped on pen one half way through. */
+    void populateTrace() {
+        Printer line4 = addPrinter("line4");
+        Printer line5 = addPrinter("line5");
+        CartridgeRepo cartridges = new CartridgeRepo(unit);
+        cartridges.observe(line4, List.of(ink(1, "A1"), ink(2, "D1")), hoursIn(0));
+        cartridges.observe(line4, List.of(ink(1, "A1")), hoursIn(2));
+        cartridges.observe(line4, List.of(ink(1, "B1")), hoursIn(3).plus(Duration.ofMinutes(30)));
+        cartridges.observe(line4, List.of(ink(1, "B1"), ink(2, "C1")), hoursIn(5));
+        cartridges.observe(line5, List.of(ink(1, "E1")), hoursIn(0));
+        new JobRepo(unit)
+                .record(
+                        line4,
+                        run(),
+                        RunDetails.none().withStartedAt(hoursIn(3)).withFinishedAt(hoursIn(4)));
+    }
+
+    @Test
+    void theTraceNamesEveryCartridgeInTheMachineDuringARun() {
+        populateTrace();
+        StringWriter out = new StringWriter();
+        assertThat(Export.write(Export.Table.TRACE, unit, out, START, END, "")).isEqualTo(2);
+        List<Map<String, String>> body = rows(out.toString());
+        assertThat(body.get(0).keySet()).containsExactlyElementsOf(Export.TRACE_COLUMNS);
+        assertThat(body).extracting(row -> row.get("serial")).containsExactly("A1", "B1");
+        assertThat(body.get(0))
+                .containsEntry("printer_id", "line4")
+                .containsEntry("label", "carton")
+                .containsEntry("pen", "1")
+                .containsEntry("part_number", "HVX-42")
+                .containsEntry("ink_family", "WATER")
+                .containsEntry("removed_at", Times.iso(hoursIn(3).plus(Duration.ofMinutes(30))));
+        assertThat(body.get(1)).containsEntry("removed_at", "");
+    }
+
+    @Test
+    void theTraceLeavesOutCartridgesFromBeforeAndAfterTheRun() {
+        populateTrace();
+        StringWriter out = new StringWriter();
+        Export.write(Export.Table.TRACE, unit, out, START, END, "");
+        assertThat(out.toString()).doesNotContain("D1").doesNotContain("C1").doesNotContain("E1");
+    }
+
+    @Test
+    void theTraceForAMachineWithNoRuns() {
+        populateTrace();
+        StringWriter out = new StringWriter();
+        assertThat(Export.write(Export.Table.TRACE, unit, out, START, END, "line5"))
+                .isZero();
+    }
+
+    @Test
+    void tablesAreNamedTheWayTheCommandLineNamesThem() {
+        assertThat(Export.Table.parse(" Trace ")).contains(Export.Table.TRACE);
+        assertThat(Export.Table.parse("runs")).contains(Export.Table.RUNS);
+        assertThat(Export.Table.parse("profiles")).isEmpty();
+        assertThat(Export.Table.SAMPLES.columns()).isEqualTo(Export.SAMPLE_COLUMNS);
     }
 
     /** The rows of a CSV text keyed by its header, the way a spreadsheet reads them. */
