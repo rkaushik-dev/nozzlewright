@@ -4,12 +4,9 @@ import io.github.rkaushikdev.nozzlewright.LabelError;
 import io.github.rkaushikdev.nozzlewright.util.Numbers;
 import io.github.rkaushikdev.nozzlewright.util.Repr;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.OptionalLong;
-import java.util.Set;
 
 /**
  * Reads the stored label format.
@@ -25,6 +22,7 @@ import java.util.Set;
  *     FIELD bb EXPIRY DD/MM/YY months=6
  *     FIELD bbe EXPIRY MM/YYYY months=18 round=month
  *     FIELD serial COUNTER start=1 step=1 width=6 pad=0
+ *     FIELD lotseq COUNTER width=3 reset=day
  *     TEXT line1 0,0 brand font=10x14
  *     TEXT line2 0,20 made
  *     BARCODE code 0,40 serial height=32 module=2
@@ -40,9 +38,6 @@ import java.util.Set;
 final class LabelParser {
 
     private static final String COMMENT = ";";
-
-    /** Option values that switch a flag off. */
-    private static final Set<String> FALSE_WORDS = Set.of("0", "no", "false", "off");
 
     private LabelParser() {}
 
@@ -118,65 +113,6 @@ final class LabelParser {
         return body.isEmpty() ? List.of() : Text.words(body);
     }
 
-    /** Parse the trailing {@code name=value} words, keys lower cased, in the order written. */
-    private static Map<String, String> options(List<String> words, int lineNumber) {
-        Map<String, String> found = new LinkedHashMap<>();
-        for (String word : words) {
-            int separator = word.indexOf('=');
-            if (separator < 0) {
-                throw new LabelError("expected name=value and got " + Repr.of(word), lineNumber);
-            }
-            String key = Text.strip(word.substring(0, separator)).toLowerCase(Locale.ROOT);
-            if (key.isEmpty()) {
-                throw new LabelError("option " + Repr.of(word) + " has no name", lineNumber);
-            }
-            if (found.containsKey(key)) {
-                throw new LabelError("option " + key + " appears twice", lineNumber);
-            }
-            found.put(key, word.substring(separator + 1));
-        }
-        return found;
-    }
-
-    private static long longOption(Map<String, String> options, String key, long fallback, int lineNumber) {
-        String raw = options.get(key);
-        if (raw == null) {
-            return fallback;
-        }
-        try {
-            return Numbers.parseLong(raw);
-        } catch (NumberFormatException error) {
-            throw notANumber(key, raw, lineNumber);
-        }
-    }
-
-    private static int intOption(Map<String, String> options, String key, int fallback, int lineNumber) {
-        long value = longOption(options, key, fallback, lineNumber);
-        try {
-            return Math.toIntExact(value);
-        } catch (ArithmeticException error) {
-            throw notANumber(key, options.get(key), lineNumber);
-        }
-    }
-
-    private static LabelError notANumber(String key, String raw, int lineNumber) {
-        return new LabelError(key + "=" + Repr.of(raw) + " is not a number", lineNumber);
-    }
-
-    /** True unless the option is given as one of the words that switch a flag off. */
-    private static boolean flag(Map<String, String> options, String key, String fallback) {
-        return !FALSE_WORDS.contains(options.getOrDefault(key, fallback).toLowerCase(Locale.ROOT));
-    }
-
-    /** Which day a date counts from, {@code clock} unless the line says {@code day=shift}. */
-    private static Dating dating(Map<String, String> options, int lineNumber) {
-        try {
-            return Dating.parse(options.getOrDefault("day", "clock"));
-        } catch (LabelError error) {
-            throw new LabelError(error.getMessage(), lineNumber);
-        }
-    }
-
     /** A counter pad character: one character, or {@code SP} for a space. */
     private static String pad(String raw, int lineNumber) {
         if (raw.toUpperCase(Locale.ROOT).equals(CounterField.PAD_SPACE)) {
@@ -221,46 +157,41 @@ final class LabelParser {
                 if (rest.isEmpty()) {
                     throw new LabelError("date field " + name + " has no pattern", lineNumber);
                 }
-                Map<String, String> options = options(rest.subList(1, rest.size()), lineNumber);
-                return new DateField(name, rest.get(0), dating(options, lineNumber));
+                LineOptions options = LineOptions.read(rest.subList(1, rest.size()), lineNumber);
+                return new DateField(name, rest.get(0), options.word("day", "clock", Dating::parse));
             }
             case "EXPIRY" -> {
                 if (rest.isEmpty()) {
                     throw new LabelError("expiry field " + name + " has no pattern", lineNumber);
                 }
-                Map<String, String> options = options(rest.subList(1, rest.size()), lineNumber);
-                int days = intOption(options, "days", 0, lineNumber);
-                int months = intOption(options, "months", 0, lineNumber);
-                ShelfLife.Rounding rounding;
-                try {
-                    rounding = ShelfLife.Rounding.parse(options.getOrDefault("round", "none"));
-                } catch (LabelError error) {
-                    throw new LabelError(error.getMessage(), lineNumber);
-                }
-                return new ExpiryField(
-                        name, rest.get(0), new ShelfLife(months, days, rounding), dating(options, lineNumber));
+                LineOptions options = LineOptions.read(rest.subList(1, rest.size()), lineNumber);
+                ShelfLife life = new ShelfLife(
+                        options.intValue("months", 0),
+                        options.intValue("days", 0),
+                        options.word("round", "none", ShelfLife.Rounding::parse));
+                return new ExpiryField(name, rest.get(0), life, options.word("day", "clock", Dating::parse));
             }
             case "COUNTER" -> {
-                Map<String, String> options = options(rest, lineNumber);
-                long start = longOption(options, "start", 1, lineNumber);
-                long step = longOption(options, "step", 1, lineNumber);
-                int width = intOption(options, "width", 6, lineNumber);
-                String pad = pad(options.getOrDefault("pad", "0"), lineNumber);
-                OptionalLong wrap = options.containsKey("wrap")
-                        ? OptionalLong.of(longOption(options, "wrap", 0, lineNumber))
+                LineOptions options = LineOptions.read(rest, lineNumber);
+                OptionalLong wrap = options.get("wrap").isPresent()
+                        ? OptionalLong.of(options.longValue("wrap", 0))
                         : OptionalLong.empty();
-                return new CounterField(name, start, step, width, pad, wrap);
+                return new CounterField(
+                        name,
+                        options.longValue("start", 1),
+                        options.longValue("step", 1),
+                        options.intValue("width", 6),
+                        pad(options.text("pad", "0"), lineNumber),
+                        wrap,
+                        options.word("reset", "never", CounterField.Reset::parse));
             }
             case "SHIFT" -> {
-                Map<String, String> options = options(rest, lineNumber);
-                return new ShiftField(name, options.getOrDefault("fallback", "?"));
+                return new ShiftField(name, LineOptions.read(rest, lineNumber).text("fallback", "?"));
             }
             case "PROMPT" -> {
-                Map<String, String> options = options(rest, lineNumber);
-                boolean required = flag(options, "required", "1");
-                String fallback = options.getOrDefault("default", "");
-                int maxLen = intOption(options, "max", 32, lineNumber);
-                return new PromptField(name, fallback, maxLen, required);
+                LineOptions options = LineOptions.read(rest, lineNumber);
+                return new PromptField(
+                        name, options.text("default", ""), options.intValue("max", 32), options.flag("required", "1"));
             }
             default -> throw new LabelError("field kind " + Repr.of(kind) + " is not one we know", lineNumber);
         }
@@ -270,57 +201,43 @@ final class LabelParser {
         if (words.size() < 3) {
             throw new LabelError("a TEXT line needs a name, a placement and a field", lineNumber);
         }
-        Map<String, String> options = options(words.subList(3, words.size()), lineNumber);
+        LineOptions options = LineOptions.read(words.subList(3, words.size()), lineNumber);
         Placement where = placement(words.get(1), lineNumber);
         return new TextElement(
                 words.get(0),
                 where,
                 words.get(2),
-                options.getOrDefault("font", TextElement.DEFAULT_FONT),
-                switchedOn(options, "invert"),
-                switchedOn(options, "reverse"));
-    }
-
-    /** A text flag is on when written bare ({@code invert=}) or as {@code invert=1}. */
-    private static boolean switchedOn(Map<String, String> options, String key) {
-        String value = options.get(key);
-        return value != null && (value.isEmpty() || value.equals("1"));
+                options.text("font", TextElement.DEFAULT_FONT),
+                options.switchedOn("invert"),
+                options.switchedOn("reverse"));
     }
 
     private static Element parseBarcode(List<String> words, int lineNumber) {
         if (words.size() < 3) {
             throw new LabelError("a BARCODE line needs a name, a placement and a field", lineNumber);
         }
-        Map<String, String> options = options(words.subList(3, words.size()), lineNumber);
-        boolean human = flag(options, "human", "1");
+        LineOptions options = LineOptions.read(words.subList(3, words.size()), lineNumber);
         Placement where = placement(words.get(1), lineNumber);
-        String symbology = options.getOrDefault("symbology", "CODE128").toUpperCase(Locale.ROOT);
-        String check = options.getOrDefault("check", "0");
-        boolean checkDigit = !check.isEmpty() && !FALSE_WORDS.contains(check.toLowerCase(Locale.ROOT));
-        int ratio = intOption(options, "ratio", Code39.MIN_RATIO, lineNumber);
-        int height = intOption(options, "height", 32, lineNumber);
-        int module = intOption(options, "module", 2, lineNumber);
+        boolean checkDigit = !options.text("check", "0").isEmpty() && options.flag("check", "0");
         return new BarcodeElement(
                 words.get(0),
                 where,
                 words.get(2),
-                symbology,
-                height,
-                module,
-                human,
-                options.getOrDefault("font", TextElement.DEFAULT_FONT),
+                options.text("symbology", Symbology.CODE128.word()).toUpperCase(Locale.ROOT),
+                options.intValue("height", 32),
+                options.intValue("module", 2),
+                options.flag("human", "1"),
+                options.text("font", TextElement.DEFAULT_FONT),
                 checkDigit,
-                ratio);
+                options.intValue("ratio", Code39.MIN_RATIO));
     }
 
     private static Element parseRule(List<String> words, int lineNumber) {
         if (words.size() < 2) {
             throw new LabelError("a RULE line needs a name and a placement", lineNumber);
         }
-        Map<String, String> options = options(words.subList(2, words.size()), lineNumber);
+        LineOptions options = LineOptions.read(words.subList(2, words.size()), lineNumber);
         Placement where = placement(words.get(1), lineNumber);
-        int width = intOption(options, "width", 1, lineNumber);
-        int height = intOption(options, "height", 1, lineNumber);
-        return new RuleElement(words.get(0), where, width, height);
+        return new RuleElement(words.get(0), where, options.intValue("width", 1), options.intValue("height", 1));
     }
 }

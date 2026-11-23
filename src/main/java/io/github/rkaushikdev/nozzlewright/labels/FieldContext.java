@@ -17,12 +17,13 @@ import java.util.Optional;
  * testable and reproducible six months later when a customer asks what a code meant.
  *
  * <p>The counters are the one thing that changes: {@link #bump} writes a counter back after a
- * print. A context belongs to one print run and is not shared between threads.
+ * print, with the production day it moved on so a daily lot sequence knows when to restart. A context belongs to one print run and is not shared between threads.
  */
 public final class FieldContext {
 
     private final LocalDateTime now;
     private final Map<String, Long> counters;
+    private final Map<String, LocalDate> counterDays;
     private final Map<String, String> prompts;
     private final List<ShiftWindow> shifts;
     private final String site;
@@ -35,6 +36,7 @@ public final class FieldContext {
     private FieldContext(Builder builder) {
         this.now = builder.now;
         this.counters = new LinkedHashMap<>(builder.counters);
+        this.counterDays = new LinkedHashMap<>(builder.counterDays);
         this.prompts = new LinkedHashMap<>(builder.prompts);
         this.shifts = List.copyOf(builder.shifts);
         this.site = builder.site;
@@ -49,6 +51,7 @@ public final class FieldContext {
     public Builder toBuilder() {
         return new Builder(now)
                 .counters(counters)
+                .counterDays(counterDays)
                 .prompts(prompts)
                 .shifts(shifts)
                 .site(site);
@@ -104,9 +107,20 @@ public final class FieldContext {
         return counters.getOrDefault(name, fallback);
     }
 
+    /** The production day a counter was last moved on, when that was recorded. */
+    public Optional<LocalDate> counterDay(String name) {
+        return Optional.ofNullable(counterDays.get(name));
+    }
+
     /** Write a counter back. */
     public void bump(String name, long value) {
         counters.put(name, value);
+    }
+
+    /** Write a counter back with the production day it was moved on. */
+    public void bump(String name, long value, LocalDate day) {
+        counters.put(name, value);
+        counterDays.put(name, day);
     }
 
     /** What the operator typed for a prompt field, if anything. */
@@ -119,6 +133,7 @@ public final class FieldContext {
 
         private final LocalDateTime now;
         private Map<String, Long> counters = Map.of();
+        private Map<String, LocalDate> counterDays = Map.of();
         private Map<String, String> prompts = Map.of();
         private List<ShiftWindow> shifts = List.of();
         private String site = "";
@@ -130,6 +145,12 @@ public final class FieldContext {
         /** The stored counter values, by field name. */
         public Builder counters(Map<String, Long> value) {
             this.counters = new LinkedHashMap<>(value);
+            return this;
+        }
+
+        /** The production day each counter was last moved on, by field name. */
+        public Builder counterDays(Map<String, LocalDate> value) {
+            this.counterDays = new LinkedHashMap<>(value);
             return this;
         }
 

@@ -1,10 +1,12 @@
 package io.github.rkaushikdev.nozzlewright.labels;
 
 import io.github.rkaushikdev.nozzlewright.LabelError;
+import io.github.rkaushikdev.nozzlewright.util.Repr;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.OptionalLong;
 
@@ -33,6 +35,40 @@ public final class CounterField extends Field {
     private final int width;
     private final String pad;
     private final OptionalLong wrapAt;
+    private final Reset reset;
+
+    /**
+     * When a counter goes back to its start on its own.
+     *
+     * <p>A serial runs for the life of the label. A lot sequence restarts every production day, so the
+     * first case of the day is 001 whatever yesterday finished on, and the production day is the
+     * shift's, so the night shift's sequence carries on past midnight.
+     */
+    public enum Reset {
+        /** Only when somebody resets it. */
+        NEVER,
+        /** At the first print of each production day. */
+        DAY;
+
+        /** The word the stored format writes after {@code reset=}, lower case. */
+        public String word() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+
+        /**
+         * The reset a stored word names.
+         *
+         * @throws LabelError when the word is not never or day
+         */
+        public static Reset parse(String text) {
+            for (Reset item : values()) {
+                if (item.word().equals(text.toLowerCase(Locale.ROOT))) {
+                    return item;
+                }
+            }
+            throw new LabelError("reset=" + Repr.of(text) + " is not never or day");
+        }
+    }
 
     /** A counter from one, by one, six wide, zero padded, never wrapping. */
     public CounterField(String name) {
@@ -49,12 +85,18 @@ public final class CounterField extends Field {
      * @param wrapAt the value it never reaches, wrapping back towards {@code start} instead
      */
     public CounterField(String name, long start, long step, int width, String pad, OptionalLong wrapAt) {
+        this(name, start, step, width, pad, wrapAt, Reset.NEVER);
+    }
+
+    /** A counter with every setting given, including when it restarts on its own. */
+    public CounterField(String name, long start, long step, int width, String pad, OptionalLong wrapAt, Reset reset) {
         super(name);
         this.start = start;
         this.step = step;
         this.width = width;
         this.pad = pad;
         this.wrapAt = wrapAt;
+        this.reset = reset;
     }
 
     /** The value before anything has printed. */
@@ -82,29 +124,39 @@ public final class CounterField extends Field {
         return wrapAt;
     }
 
+    /** When it restarts on its own. */
+    public Reset reset() {
+        return reset;
+    }
+
     /** The same counter starting at {@code value}. */
     public CounterField withStart(long value) {
-        return new CounterField(name(), value, step, width, pad, wrapAt);
+        return new CounterField(name(), value, step, width, pad, wrapAt, reset);
     }
 
     /** The same counter moving {@code value} per print. */
     public CounterField withStep(long value) {
-        return new CounterField(name(), start, value, width, pad, wrapAt);
+        return new CounterField(name(), start, value, width, pad, wrapAt, reset);
     }
 
     /** The same counter printing {@code value} characters. */
     public CounterField withWidth(int value) {
-        return new CounterField(name(), start, step, value, pad, wrapAt);
+        return new CounterField(name(), start, step, value, pad, wrapAt, reset);
     }
 
     /** The same counter padded with {@code value}. */
     public CounterField withPad(String value) {
-        return new CounterField(name(), start, step, width, value, wrapAt);
+        return new CounterField(name(), start, step, width, value, wrapAt, reset);
     }
 
     /** The same counter wrapping at {@code value}. */
     public CounterField withWrapAt(long value) {
-        return new CounterField(name(), start, step, width, pad, OptionalLong.of(value));
+        return new CounterField(name(), start, step, width, pad, OptionalLong.of(value), reset);
+    }
+
+    /** The same counter restarting by {@code value}. */
+    public CounterField withReset(Reset value) {
+        return new CounterField(name(), start, step, width, pad, wrapAt, value);
     }
 
     @Override
@@ -126,7 +178,24 @@ public final class CounterField extends Field {
 
     @Override
     public String render(FieldContext context) {
-        return format(context.counter(name(), start));
+        return format(current(context));
+    }
+
+    /**
+     * The value that prints now: the stored one, or the start when nothing is stored yet or when a
+     * daily counter was last moved on another production day.
+     */
+    public long current(FieldContext context) {
+        boolean stale = reset == Reset.DAY
+                && context.counterDay(name())
+                        .filter(day -> !day.equals(context.productionDay()))
+                        .isPresent();
+        return stale ? start : context.counter(name(), start);
+    }
+
+    /** Record one print: store the value after the one that printed, dated by the production day. */
+    public void printed(FieldContext context) {
+        context.bump(name(), advance(current(context)), context.productionDay());
     }
 
     /**
@@ -195,6 +264,9 @@ public final class CounterField extends Field {
         if (wrapAt.isPresent()) {
             parts.add("wrap=" + wrapAt.getAsLong());
         }
+        if (reset != Reset.NEVER) {
+            parts.add("reset=" + reset.word());
+        }
         return String.join(" ", parts);
     }
 
@@ -206,6 +278,7 @@ public final class CounterField extends Field {
         attributes.put("width", width);
         attributes.put("pad", pad);
         attributes.put("wrap_at", wrapAt);
+        attributes.put("reset", reset.word());
         return Collections.unmodifiableMap(attributes);
     }
 }
