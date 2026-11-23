@@ -66,16 +66,29 @@ public final class Code128 {
 
     private Code128() {}
 
+    /** Function one: the GS1 flag after the start character, and the separator between fields. */
+    public static final int FNC1 = 102;
+
     /**
      * Every character value in the symbol, check and stop included.
      *
      * @throws LabelError when there is nothing to encode or a character is outside printable ASCII
      */
     public static List<Integer> encode(String data) {
-        List<Integer> values = encodeValues(data);
-        values.add(checksum(values));
-        values.add(STOP);
-        return Collections.unmodifiableList(values);
+        return finish(encodeValues(data.codePoints().toArray(), false));
+    }
+
+    /**
+     * Every character value in a GS1-128 symbol, from bracketed element strings.
+     *
+     * <p>Function one follows the start character, which is what tells a scanner the data is GS1, and
+     * stands in for every group separator between fields.
+     *
+     * @throws LabelError when the data is not valid GS1 element strings
+     */
+    public static List<Integer> encodeGs1(String bracketed) {
+        String data = Gs1.encoded(Gs1.parse(bracketed));
+        return finish(encodeValues(data.codePoints().toArray(), true));
     }
 
     /** The symbol as modules, {@code true} for a bar, with a quiet zone either side. */
@@ -91,50 +104,70 @@ public final class Code128 {
      * so the safe thing is to always carry the zone and let the caller turn it off deliberately.
      */
     public static List<Boolean> modulesFor(String data, boolean quietZone) {
+        return modulesOf(encode(data), quietZone);
+    }
+
+    /** A GS1-128 symbol as modules, with a quiet zone either side. */
+    public static List<Boolean> modulesForGs1(String bracketed) {
+        return modulesOf(encodeGs1(bracketed), true);
+    }
+
+    /** Character values as modules, {@code true} for a bar. */
+    public static List<Boolean> modulesOf(List<Integer> values, boolean quietZone) {
         List<Boolean> modules = new ArrayList<>();
-        if (quietZone) {
-            modules.addAll(Collections.nCopies(QUIET_ZONE_MODULES, false));
-        }
-        for (int value : encode(data)) {
+        List<Boolean> zone = Collections.nCopies(quietZone ? QUIET_ZONE_MODULES : 0, false);
+        modules.addAll(zone);
+        for (int value : values) {
             boolean bar = true;
             for (char width : PATTERNS.get(value).toCharArray()) {
                 modules.addAll(Collections.nCopies(width - '0', bar));
                 bar = !bar;
             }
         }
-        if (quietZone) {
-            modules.addAll(Collections.nCopies(QUIET_ZONE_MODULES, false));
-        }
+        modules.addAll(zone);
         return Collections.unmodifiableList(modules);
     }
 
-    /** How wide the symbol is with its quiet zones, without building it. */
+    /** How wide the symbol is with its quiet zones. */
     public static int widthInModules(String data) {
         return widthInModules(data, true);
     }
 
-    /** How wide the symbol is, without building it. */
+    /** How wide the symbol is, in modules. */
     public static int widthInModules(String data, boolean quietZone) {
-        int total = 0;
-        for (int value : encode(data)) {
-            for (char width : PATTERNS.get(value).toCharArray()) {
-                total += width - '0';
-            }
-        }
-        return quietZone ? total + QUIET_ZONE_MODULES * 2 : total;
+        return modulesOf(encode(data), quietZone).size();
     }
 
-    /** Turn text into character values, switching code sets where it pays. */
-    private static List<Integer> encodeValues(String data) {
-        if (data.isEmpty()) {
+    /** Add the check character and the stop pattern. */
+    private static List<Integer> finish(List<Integer> values) {
+        values.add(checksum(values));
+        values.add(STOP);
+        return Collections.unmodifiableList(values);
+    }
+
+    /**
+     * Turn code points into character values, switching code sets where it pays.
+     *
+     * <p>With {@code gs1} set, function one follows the start character and every group separator is
+     * written as function one, which both code sets carry.
+     */
+    private static List<Integer> encodeValues(int[] points, boolean gs1) {
+        if (points.length == 0) {
             throw new LabelError("code 128 needs something to encode");
         }
-        int[] points = data.codePoints().toArray();
         List<Integer> values = new ArrayList<>();
         int index = 0;
         boolean inC = shouldSwitchToC(points, 0);
         values.add(inC ? START_C : START_B);
+        if (gs1) {
+            values.add(FNC1);
+        }
         while (index < points.length) {
+            if (gs1 && points[index] == Gs1.GROUP_SEPARATOR) {
+                values.add(FNC1);
+                index++;
+                continue;
+            }
             if (inC) {
                 if (digitRun(points, index) >= 2) {
                     values.add(Character.digit(points[index], 10) * 10 + Character.digit(points[index + 1], 10));

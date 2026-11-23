@@ -213,6 +213,28 @@ class RasterTest {
     }
 
     @Test
+    void aGs1BarcodeRendersFromBracketedData() {
+        ResolvedLabel resolved = label(
+                48,
+                text("(01)09501101530003(10)A12"),
+                barcode().symbology("GS1-128").humanReadable(false).build());
+        DotMatrix matrix = Raster.render(resolved, standardFonts());
+        assertThat(matrix.width())
+                .isEqualTo(Code128.modulesForGs1("(01)09501101530003(10)A12").size() * 2);
+    }
+
+    @Test
+    void aGs1BarcodeWithAnUnknownIdentifierIsRefused() {
+        ResolvedLabel resolved = label(
+                48,
+                text("(99)A12"),
+                barcode().symbology("gs1-128").humanReadable(false).build());
+        assertThatThrownBy(() -> Raster.render(resolved, standardFonts()))
+                .isInstanceOf(LabelError.class)
+                .hasMessageContaining("(99)");
+    }
+
+    @Test
     void aCode39CheckCharacterMakesItWider() {
         ResolvedLabel plain = label(
                 48,

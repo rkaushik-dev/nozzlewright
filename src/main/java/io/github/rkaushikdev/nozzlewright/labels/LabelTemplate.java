@@ -3,13 +3,11 @@ package io.github.rkaushikdev.nozzlewright.labels;
 import io.github.rkaushikdev.nozzlewright.LabelError;
 import io.github.rkaushikdev.nozzlewright.util.Repr;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.SortedSet;
 import java.util.TreeSet;
 
 /**
@@ -35,10 +33,6 @@ public record LabelTemplate(String name, int heightDots, List<Element> elements,
 
     /** Widest message the column buffer holds. */
     public static final int MAX_LABEL_WIDTH_DOTS = 8192;
-
-    /** The symbologies this build can raster. */
-    public static final SortedSet<String> SYMBOLOGIES =
-            Collections.unmodifiableSortedSet(new TreeSet<>(List.of("CODE128", "CODE39")));
 
     /** Copies the elements and fields. */
     public LabelTemplate {

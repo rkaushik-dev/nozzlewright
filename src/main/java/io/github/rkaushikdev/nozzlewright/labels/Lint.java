@@ -8,9 +8,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -111,7 +111,7 @@ public final class Lint {
         for (Element element : template.elements()) {
             switch (element) {
                 case TextElement text -> findings.addAll(checkText(text, template, fonts));
-                case BarcodeElement barcode -> findings.addAll(checkBarcode(barcode, head));
+                case BarcodeElement barcode -> findings.addAll(checkBarcode(barcode, template, head));
                 case RuleElement rule
                 when rule.heightDots() > template.heightDots() ->
                     findings.add(new Finding(Grade.STOP, rule.name(), "the rule is taller than the label"));
@@ -183,15 +183,18 @@ public final class Lint {
     }
 
     /** Scannability checks for one barcode. */
-    private static List<Finding> checkBarcode(BarcodeElement element, HeadGeometry head) {
-        List<Finding> findings = new ArrayList<>();
-        String symbology = element.symbology().toUpperCase(Locale.ROOT);
-        if (!LabelTemplate.SYMBOLOGIES.contains(symbology)) {
-            findings.add(new Finding(Grade.STOP, element.name(), "this build does not print " + element.symbology()));
-            return findings;
+    private static List<Finding> checkBarcode(BarcodeElement element, LabelTemplate template, HeadGeometry head) {
+        Optional<Symbology> kind = element.printedAs();
+        if (kind.isEmpty()) {
+            return List.of(new Finding(Grade.STOP, element.name(), "this build does not print " + element.symbology()));
         }
-        if (symbology.equals("CODE39")) {
-            findings.addAll(checkCode39(element));
+        List<Finding> findings = new ArrayList<>();
+        switch (kind.get()) {
+            case CODE39 -> findings.addAll(checkCode39(element));
+            case GS1_128 -> findings.addAll(checkGs1(element, template));
+            case CODE128 -> {
+                // Plain Code 128 carries any printable text and has nothing of its own to check.
+            }
         }
         if (element.moduleDots() < MIN_SCANNABLE_MODULE) {
             findings.add(new Finding(
@@ -207,6 +210,22 @@ public final class Lint {
                     "a " + element.heightDots() + " dot high barcode is hard to aim a scanner at"));
         }
         return findings;
+    }
+
+    /**
+     * A GS1-128 symbol fed from fixed text is checked here, so the finding names the barcode rather
+     * than the render. Data that only exists at print time is checked when it renders.
+     */
+    private static List<Finding> checkGs1(BarcodeElement element, LabelTemplate template) {
+        if (!(template.field(element.source()) instanceof TextField text)) {
+            return List.of();
+        }
+        try {
+            Gs1.parse(text.value());
+            return List.of();
+        } catch (LabelError error) {
+            return List.of(new Finding(Grade.STOP, element.name(), error.getMessage()));
+        }
     }
 
     /** Render the message and measure what came out. */

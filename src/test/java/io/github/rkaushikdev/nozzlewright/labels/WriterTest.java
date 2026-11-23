@@ -21,7 +21,8 @@ class WriterTest {
             "LABEL shifted 8\nFIELD s SHIFT fallback=-\nTEXT t 0,0 s\nEND\n",
             "LABEL asked 8\nFIELD l PROMPT max=12 required=0 default=NONE\nTEXT t 0,0 l\nEND\n",
             "LABEL coded 104\nFIELD n COUNTER\nBARCODE c 4,8 n height=40 module=3 human=0\nEND\n",
-            "LABEL ruled 32\nFIELD a TEXT X\nTEXT t 0,0 a invert=1 reverse=1\nRULE r 0,20 width=60 height=3\nEND\n");
+            "LABEL ruled 32\nFIELD a TEXT X\nTEXT t 0,0 a invert=1 reverse=1\nRULE r 0,20 width=60 height=3\nEND\n",
+            "LABEL cased 104\nFIELD g TEXT (01)09501101530003\nBARCODE c 0,0 g symbology=gs1-128 height=40\nEND\n");
 
     static List<String> sources() {
         return SOURCES;
@@ -52,6 +53,15 @@ class WriterTest {
         assertThat(second.elements())
                 .extracting(Element::name)
                 .isEqualTo(first.elements().stream().map(Element::name).toList());
+    }
+
+    @Test
+    void aGs1SymbologyIsWrittenAsTheStandardWord() {
+        String source = rewritten(SOURCES.get(8));
+        assertThat(source).contains("symbology=GS1-128");
+        assertThat(LabelTemplate.parse(source).elements().get(0))
+                .isInstanceOfSatisfying(BarcodeElement.class, barcode -> assertThat(barcode.printedAs())
+                        .contains(Symbology.GS1_128));
     }
 
     @Test

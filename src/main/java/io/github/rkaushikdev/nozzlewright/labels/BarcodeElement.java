@@ -3,6 +3,7 @@ package io.github.rkaushikdev.nozzlewright.labels;
 import io.github.rkaushikdev.nozzlewright.LabelError;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * A barcode built from one field.
@@ -14,7 +15,8 @@ import java.util.List;
  * @param name what the template calls this element
  * @param placement where the top left of the symbol sits
  * @param source the field whose text is encoded
- * @param symbology {@code CODE128} or {@code CODE39}
+ * @param symbology the word a {@link Symbology} is stored as, kept as written so lint can name an
+ *     unknown one
  * @param heightDots how tall the bars are
  * @param moduleDots how many dot columns one module is, one to eight
  * @param humanReadable whether the text is printed under the bars
@@ -37,7 +39,17 @@ public record BarcodeElement(
 
     /** A Code 128 symbol at {@code placement} with every other setting at its default. */
     public BarcodeElement(String name, Placement placement, String source) {
-        this(name, placement, source, "CODE128", 32, 2, true, TextElement.DEFAULT_FONT, false, Code39.MIN_RATIO);
+        this(
+                name,
+                placement,
+                source,
+                Symbology.CODE128.word(),
+                32,
+                2,
+                true,
+                TextElement.DEFAULT_FONT,
+                false,
+                Code39.MIN_RATIO);
     }
 
     /** A builder for a barcode at the origin with every setting at its default. */
@@ -48,6 +60,11 @@ public record BarcodeElement(
     /** A builder starting from this barcode. */
     public Builder toBuilder() {
         return new Builder(this);
+    }
+
+    /** The symbology, when the word is one this build prints. */
+    public Optional<Symbology> printedAs() {
+        return Symbology.parse(symbology);
     }
 
     @Override
@@ -78,7 +95,7 @@ public record BarcodeElement(
     public String toSource() {
         List<String> parts = new ArrayList<>();
         parts.add("BARCODE " + name + " " + placement.toSource() + " " + source);
-        if (!symbology.equals("CODE128")) {
+        if (!symbology.equals(Symbology.CODE128.word())) {
             parts.add("symbology=" + symbology);
         }
         if (heightDots != 32) {

@@ -5,7 +5,6 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Turning a resolved label into dots.
@@ -100,12 +99,13 @@ public final class Raster {
      * everything else. Here it is refused rather than silently printed as Code 128.
      */
     private static List<Boolean> modulesFor(BarcodeElement element, String text) {
-        return switch (element.symbology().toUpperCase(Locale.ROOT)) {
-            case "CODE128" -> Code128.modulesFor(text);
-            case "CODE39" -> Code39.modulesFor(text, element.checkDigit(), element.wideRatio(), true);
-            default ->
-                throw new LabelError("barcode " + element.name() + " asks for " + element.symbology()
-                        + " and this build does not print it");
+        Symbology kind = element.printedAs()
+                .orElseThrow(() -> new LabelError("barcode " + element.name() + " asks for " + element.symbology()
+                        + " and this build does not print it"));
+        return switch (kind) {
+            case CODE128 -> Code128.modulesFor(text);
+            case CODE39 -> Code39.modulesFor(text, element.checkDigit(), element.wideRatio(), true);
+            case GS1_128 -> Code128.modulesForGs1(text);
         };
     }
 

@@ -184,4 +184,37 @@ class Code128Test {
     void encodingIsDeterministic() {
         assertThat(Code128.encode("BATCH-9")).isEqualTo(Code128.encode("BATCH-9"));
     }
+
+    @Test
+    void aGs1SymbolCarriesFunctionOneAfterTheStart() {
+        List<Integer> values = Code128.encodeGs1("(01)09501101530003");
+        assertThat(values.subList(0, 10)).containsExactly(START_C, Code128.FNC1, 1, 9, 50, 11, 1, 53, 0, 3);
+        assertThat(values.get(10)).isEqualTo(71);
+        assertThat(values.get(11)).isEqualTo(STOP);
+    }
+
+    @Test
+    void aGs1SeparatorIsWrittenAsFunctionOne() {
+        List<Integer> values = Code128.encodeGs1("(10)A1(21)7");
+        assertThat(values.subList(0, 10))
+                .containsExactly(START_C, Code128.FNC1, 10, Code128.CODE_B, 33, 17, Code128.FNC1, 18, 17, 23);
+    }
+
+    @Test
+    void aGroupSeparatorOutsideGs1IsStillRefused() {
+        assertThatThrownBy(() -> Code128.encode("A" + Gs1.GROUP_SEPARATOR + "B"))
+                .isInstanceOf(LabelError.class)
+                .hasMessageContaining("set B cannot carry");
+    }
+
+    @Test
+    void aGs1SymbolIsOneCharacterWiderThanItsPlainData() {
+        int plain = Code128.widthInModules("0109501101530003");
+        assertThat(Code128.modulesForGs1("(01)09501101530003")).hasSize(plain + 11);
+    }
+
+    @Test
+    void modulesOfMatchesTheTextForm() {
+        assertThat(Code128.modulesOf(Code128.encode("LOT4417"), false)).isEqualTo(Code128.modulesFor("LOT4417", false));
+    }
 }

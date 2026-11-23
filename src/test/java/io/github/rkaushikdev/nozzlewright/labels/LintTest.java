@@ -124,6 +124,34 @@ class LintTest {
         assertThat(anyMessage(report.of(Grade.WARN), "aim a scanner")).isTrue();
     }
 
+    static final String CASE_CODE = "LABEL case 104\n"
+            + "FIELD gs1 TEXT (01)09501101530003(10)A12\n"
+            + "BARCODE code 0,0 gs1 symbology=GS1-128 height=40 module=3 human=0\n"
+            + "END\n";
+
+    @Test
+    void aSoundGs1CaseCodePasses() {
+        LintReport report = check(CASE_CODE);
+        assertThat(report.of(Grade.STOP)).isEmpty();
+    }
+
+    @Test
+    void aGs1CaseCodeWithAShortGtinIsBlockedAtTheBarcode() {
+        LintReport report = check(CASE_CODE.replace("09501101530003", "0950110153"));
+        assertThat(report.ok()).isFalse();
+        assertThat(report.of(Grade.STOP)).anySatisfy(item -> {
+            assertThat(item.where()).isEqualTo("code");
+            assertThat(item.message()).contains("exactly 14 characters");
+        });
+    }
+
+    @Test
+    void aGs1SymbolFedFromACounterIsLeftToTheRender() {
+        LintReport report = check(CASE_CODE.replace("FIELD gs1 TEXT (01)09501101530003(10)A12", "FIELD gs1 COUNTER"));
+        assertThat(report.of(Grade.STOP)).noneMatch(item -> item.where().equals("code"));
+        assertThat(report.of(Grade.STOP)).anyMatch(item -> item.where().equals("render"));
+    }
+
     @Test
     void aSymbologyThisMachineCannotPrint() {
         String other = GOOD.replace("symbology=CODE128 ", "").replace(GOOD_BARCODE, GOOD_BARCODE + " symbology=EAN13");
