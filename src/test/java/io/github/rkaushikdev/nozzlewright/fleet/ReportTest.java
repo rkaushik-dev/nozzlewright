@@ -6,11 +6,13 @@ import static org.assertj.core.api.Assertions.within;
 
 import io.github.rkaushikdev.nozzlewright.NozzlewrightError;
 import io.github.rkaushikdev.nozzlewright.printer.Alarms;
+import io.github.rkaushikdev.nozzlewright.printer.InkReading;
 import io.github.rkaushikdev.nozzlewright.printer.JobOutcome;
 import io.github.rkaushikdev.nozzlewright.printer.JobResult;
 import io.github.rkaushikdev.nozzlewright.printer.MachineState;
 import io.github.rkaushikdev.nozzlewright.printer.PrinterStatus;
 import io.github.rkaushikdev.nozzlewright.storage.AlarmRepo;
+import io.github.rkaushikdev.nozzlewright.storage.CartridgeRepo;
 import io.github.rkaushikdev.nozzlewright.storage.Database;
 import io.github.rkaushikdev.nozzlewright.storage.JobRepo;
 import io.github.rkaushikdev.nozzlewright.storage.Printer;
@@ -211,6 +213,55 @@ class ReportTest {
         assertThat(lines.get(1)).contains("machine");
         assertThat(lines).anyMatch(row -> row.contains("line4"));
         assertThat(lines.get(lines.size() - 1)).startsWith("site: 2120 coded, 3 runs, 1 short");
+    }
+
+    static InkReading ink(int pen, int level, String serial) {
+        return new InkReading(pen, level, serial, "HVX-42", "WATER");
+    }
+
+    /** Line four changes a spent cartridge and pulls a half full one during the shift. */
+    void cartridgeChanges() {
+        Printer line4 = addPrinter("line4");
+        addPrinter("line5", "5");
+        CartridgeRepo cartridges = new CartridgeRepo(unit);
+        cartridges.observe(line4, List.of(ink(1, 60, "A1"), ink(2, 5, "B1")), START.minus(Duration.ofDays(2)));
+        cartridges.observe(line4, List.of(ink(1, 55, "A1"), ink(2, 3, "B1")), hoursIn(1));
+        cartridges.observe(line4, List.of(ink(1, 50, "A1"), ink(2, 100, "B2")), hoursIn(2));
+        cartridges.observe(line4, List.of(ink(1, 100, "A2"), ink(2, 99, "B2")), hoursIn(3));
+        cartridges.observe(line4, List.of(ink(1, 100, "A3"), ink(2, 99, "B2")), END.plus(Duration.ofHours(1)));
+    }
+
+    @Test
+    void cartridgeChangesAreCountedPerMachine() {
+        cartridgeChanges();
+        ShiftReport report = report();
+        MachineLine line4 = machine(report, "line4");
+        assertThat(line4.cartridgesFitted()).isEqualTo(2);
+        assertThat(line4.pulledWithInk()).isEqualTo(1);
+        assertThat(machine(report, "line5").cartridgesFitted()).isZero();
+        assertThat(report.cartridgesFitted()).isEqualTo(2);
+        assertThat(report.pulledWithInk()).isEqualTo(1);
+    }
+
+    @Test
+    void theReportShowsTheCartridgeColumns() {
+        cartridgeChanges();
+        List<String> lines = report().render().lines().toList();
+        assertThat(lines.get(1)).contains("swaps", "pulled");
+        assertThat(lines.get(1).indexOf("swaps")).isLessThan(lines.get(1).indexOf("worst"));
+        String row = lines.stream()
+                .filter(text -> text.startsWith("line4"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(row).matches("line4 +4 +0 +0 +0 +0\\.0% +0\\.0% +2 +1 -");
+        assertThat(lines.get(lines.size() - 1)).endsWith("2 cartridges fitted, 1 pulled with ink left");
+    }
+
+    @Test
+    void theHeaderAndTheRowsLineUp() {
+        MachineLine line = new MachineLine("line9", "9", 4, 4, 2, 120, 1, 0, 0, "", 1, 0);
+        assertThat(line.row()).hasSize(MachineLine.header().length() - "worst".length() + 1);
+        assertThat(MachineLine.header()).startsWith("machine      line     coded");
     }
 
     @Test

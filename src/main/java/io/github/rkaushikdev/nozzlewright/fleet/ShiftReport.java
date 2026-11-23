@@ -1,8 +1,11 @@
 package io.github.rkaushikdev.nozzlewright.fleet;
 
 import io.github.rkaushikdev.nozzlewright.NozzlewrightError;
+import io.github.rkaushikdev.nozzlewright.printer.InkReading;
 import io.github.rkaushikdev.nozzlewright.storage.AlarmRecord;
 import io.github.rkaushikdev.nozzlewright.storage.AlarmRepo;
+import io.github.rkaushikdev.nozzlewright.storage.CartridgeFitting;
+import io.github.rkaushikdev.nozzlewright.storage.CartridgeRepo;
 import io.github.rkaushikdev.nozzlewright.storage.JobRepo;
 import io.github.rkaushikdev.nozzlewright.storage.JobRun;
 import io.github.rkaushikdev.nozzlewright.storage.PollSample;
@@ -17,7 +20,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -80,24 +82,9 @@ public record ShiftReport(
         if (!end.isAfter(start)) {
             throw new NozzlewrightError("a report window has to end after it starts");
         }
-        SampleRepo samples = new SampleRepo(unit);
-        JobRepo jobs = new JobRepo(unit);
-        AlarmRepo alarms = new AlarmRepo(unit);
-
         List<MachineLine> lines = new ArrayList<>();
         for (Printer printer : new PrinterRepo(unit).all()) {
-            String id = printer.getPrinterId();
-            List<PollSample> window = samples.between(id, start, end);
-            List<JobRun> runs = jobs.recent(id, LOOK_BACK).stream()
-                    .filter(run -> inside(run.getStartedAt(), start, end))
-                    .toList();
-            List<AlarmRecord> raised = new ArrayList<>(alarms.history(id, LOOK_BACK).stream()
-                    .filter(row -> inside(row.getRaisedAt(), start, end))
-                    .toList());
-            alarms.active(id).stream()
-                    .filter(row -> !row.getRaisedAt().isAfter(end))
-                    .forEach(raised::add);
-            lines.add(lineFor(printer, window, runs, raised));
+            lines.add(MachineRows.read(unit, printer, start, end).line());
         }
 
         Optional<SiteOee> effectiveness = Optional.empty();
@@ -155,19 +142,19 @@ public record ShiftReport(
                 .toList();
     }
 
+    /** Cartridges that went into machines across the site. */
+    public int cartridgesFitted() {
+        return machines.stream().mapToInt(MachineLine::cartridgesFitted).sum();
+    }
+
+    /** Cartridges taken out across the site while they still had ink. */
+    public int pulledWithInk() {
+        return machines.stream().mapToInt(MachineLine::pulledWithInk).sum();
+    }
+
     /** The whole report as text: the window, the machine table, the site line and any OEE block. */
     public String render() {
-        String header = String.format(
-                Locale.ROOT,
-                "%-12s %-6s %7s %7s %7s %7s %7s %s",
-                "machine",
-                "line",
-                "coded",
-                "runs",
-                "alarms",
-                "up",
-                "coding",
-                "worst");
+        String header = MachineLine.header();
         String rule = "-".repeat(header.length());
         List<String> lines = new ArrayList<>();
         lines.add(siteId + " from " + Times.text(start) + " to " + Times.text(end));
@@ -176,7 +163,8 @@ public record ShiftReport(
         machines.forEach(line -> lines.add(line.row()));
         lines.add(rule);
         lines.add("site: " + printed() + " coded, " + runs() + " runs, " + shortRuns() + " short, "
-                + Numbers.fixed(availability() * 100, 1) + "% up");
+                + Numbers.fixed(availability() * 100, 1) + "% up, " + cartridgesFitted() + " cartridges fitted, "
+                + pulledWithInk() + " pulled with ink left");
         effectiveness.ifPresent(site -> {
             lines.add(site.oee().render());
             List<MachineOee> worst = site.worst();
@@ -194,31 +182,79 @@ public record ShiftReport(
         return !moment.isBefore(start) && !moment.isAfter(end);
     }
 
-    /** Fold one machine's rows into a report line. */
-    private static MachineLine lineFor(
-            Printer printer, List<PollSample> window, List<JobRun> runs, List<AlarmRecord> alarms) {
-        String worst = "";
-        for (AlarmRecord row : alarms) {
-            if (row.getSeverity().equals("stop")) {
-                worst = row.getName();
-                break;
-            }
-            if (worst.isEmpty()) {
-                worst = row.getName();
-            }
+    /** Everything one machine's line is folded from, read for one window. */
+    private record MachineRows(
+            Printer printer,
+            List<PollSample> samples,
+            List<JobRun> runs,
+            List<AlarmRecord> alarms,
+            List<CartridgeFitting> fittings,
+            Instant start,
+            Instant end) {
+
+        static MachineRows read(UnitOfWork unit, Printer printer, Instant start, Instant end) {
+            String id = printer.getPrinterId();
+            AlarmRepo alarms = new AlarmRepo(unit);
+            List<AlarmRecord> raised = new ArrayList<>(alarms.history(id, LOOK_BACK).stream()
+                    .filter(row -> inside(row.getRaisedAt(), start, end))
+                    .toList());
+            alarms.active(id).stream()
+                    .filter(row -> !row.getRaisedAt().isAfter(end))
+                    .forEach(raised::add);
+            return new MachineRows(
+                    printer,
+                    new SampleRepo(unit).between(id, start, end),
+                    new JobRepo(unit)
+                            .recent(id, LOOK_BACK).stream()
+                                    .filter(run -> inside(run.getStartedAt(), start, end))
+                                    .toList(),
+                    raised,
+                    new CartridgeRepo(unit).allFittings(printer),
+                    start,
+                    end);
         }
-        return new MachineLine(
-                printer.getPrinterId(),
-                printer.getLine(),
-                window.size(),
-                (int) window.stream().filter(PollSample::isReachable).count(),
-                (int) window.stream()
-                        .filter(sample -> sample.getState().equals("PRINTING"))
-                        .count(),
-                runs.stream().mapToLong(JobRun::getPrinted).sum(),
-                runs.size(),
-                (int) runs.stream().filter(JobRun::isShort).count(),
-                alarms.size(),
-                worst);
+
+        /** The first stop among the alarms, or the first of them, empty with none. */
+        String worstAlarm() {
+            return alarms.stream()
+                    .filter(row -> row.getSeverity().equals("stop"))
+                    .findFirst()
+                    .or(() -> alarms.stream().findFirst())
+                    .map(AlarmRecord::getName)
+                    .orElse("");
+        }
+
+        /**
+         * A cartridge pulled with ink left is one removed in the window while it still read above the
+         * low level: a cartridge thrown away part full, which is the ink a store person asks about.
+         */
+        int pulledWithInk() {
+            return (int) fittings.stream()
+                    .filter(row -> row.getRemovedAt()
+                            .filter(out -> inside(out, start, end))
+                            .isPresent())
+                    .filter(row -> row.getLastLevel() > InkReading.LOW_INK_PCT)
+                    .count();
+        }
+
+        MachineLine line() {
+            return new MachineLine(
+                    printer.getPrinterId(),
+                    printer.getLine(),
+                    samples.size(),
+                    (int) samples.stream().filter(PollSample::isReachable).count(),
+                    (int) samples.stream()
+                            .filter(sample -> sample.getState().equals("PRINTING"))
+                            .count(),
+                    runs.stream().mapToLong(JobRun::getPrinted).sum(),
+                    runs.size(),
+                    (int) runs.stream().filter(JobRun::isShort).count(),
+                    alarms.size(),
+                    worstAlarm(),
+                    (int) fittings.stream()
+                            .filter(row -> inside(row.getFittedAt(), start, end))
+                            .count(),
+                    pulledWithInk());
+        }
     }
 }
