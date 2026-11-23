@@ -132,6 +132,25 @@ class CliLabelTest {
     }
 
     @Test
+    void saveWithLintRefusesALabelThatCannotPrint() throws Exception {
+        Path source = write("coded.lbl", CODED.replace("LABEL coded 104", "LABEL coded 300"));
+        Cli.Result refused = invoke(tmp, "label", "save", source.toString(), "--lint");
+        assertThat(refused.exitCode()).isEqualTo(Main.REFUSED);
+        assertThat(refused.stderr()).contains("coded cannot print, label: the label is 300 dots high");
+        assertThat(invoke(tmp, "label", "list").stdout()).doesNotContain("coded");
+
+        Cli.Result stored = invoke(tmp, "label", "save", source.toString(), "--lint", "--pens", "3");
+        assertThat(stored.exitCode()).isZero();
+        assertThat(stored.stdout()).contains("saved coded at revision 1");
+    }
+
+    @Test
+    void saveWithoutLintStoresWhatParses() throws Exception {
+        Path source = write("coded.lbl", CODED.replace("LABEL coded 104", "LABEL coded 300"));
+        assertThat(invoke(tmp, "label", "save", source.toString()).exitCode()).isZero();
+    }
+
+    @Test
     void proofDrawsTheLabel() throws Exception {
         Path source = write("carton.lbl", CARTON);
         Cli.Result result = invoke(tmp, "label", "proof", source.toString(), "--at", "2025-06-14T09:30:00");

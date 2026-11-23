@@ -1,12 +1,16 @@
 package io.github.rkaushikdev.nozzlewright.api;
 
+import io.github.rkaushikdev.nozzlewright.labels.FontStore;
 import io.github.rkaushikdev.nozzlewright.labels.LabelDiff;
 import io.github.rkaushikdev.nozzlewright.labels.LabelStore;
 import io.github.rkaushikdev.nozzlewright.labels.LabelTemplate;
+import io.github.rkaushikdev.nozzlewright.labels.Lint;
+import io.github.rkaushikdev.nozzlewright.printer.HeadGeometry;
 import io.github.rkaushikdev.nozzlewright.storage.LabelRepo;
 import io.github.rkaushikdev.nozzlewright.storage.LabelRevision;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -26,7 +30,8 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>Labels are stored as source text and parsed on the way in, so a label that cannot be parsed never
  * reaches the database and a client finds out at the moment it uploads rather than at the moment a
- * line tries to print it.
+ * line tries to print it. With {@code lint=true} a store also refuses a label that parses and still
+ * cannot print on a head of {@code pens} pens at {@code dpi}.
  */
 @RestController
 @RequiresKey
@@ -131,10 +136,21 @@ public class LabelRoutes {
      */
     @PutMapping("/{name}")
     @ResponseStatus(HttpStatus.CREATED)
-    public LabelOut putLabel(@PathVariable("name") String name, @Valid @RequestBody LabelIn body) {
+    public LabelOut putLabel(
+            @PathVariable("name") String name,
+            @Valid @RequestBody LabelIn body,
+            @RequestParam(name = "lint", defaultValue = "false") boolean lint,
+            @RequestParam(name = "pens", defaultValue = "1") int pens,
+            @RequestParam(name = "dpi", defaultValue = "300") int dpi) {
         LabelTemplate template = LabelTemplate.parse(body.source());
         if (!template.name().equals(name)) {
             throw new ApiProblem(400, "the label calls itself " + template.name() + " and the path says " + name);
+        }
+        if (lint) {
+            QueryValues.within("pens", pens, 1, 8);
+            HeadGeometry head = HeadGeometry.stacked(HeadGeometry.DESK_FAMILY, pens, dpi);
+            head.validate();
+            Lint.check(template, FontStore.stock(), head, LocalDateTime.now()).requirePrintable();
         }
         String source = template.toSource();
         return services.database().apply(unit -> {

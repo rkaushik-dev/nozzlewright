@@ -23,6 +23,13 @@ public final class FontStore {
         // Fonts arrive through register.
     }
 
+    /** A store holding the family every machine ships with, built from the stock 5x7. */
+    public static FontStore stock() {
+        FontStore store = new FontStore();
+        FontOps.registerStandardFamily(store, FontData.FIVE_BY_SEVEN);
+        return store;
+    }
+
     /**
      * Add a font, refusing to shadow one already registered under the same name.
      *

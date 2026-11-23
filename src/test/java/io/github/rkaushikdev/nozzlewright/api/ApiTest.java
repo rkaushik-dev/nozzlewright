@@ -361,6 +361,38 @@ class ApiTest {
     }
 
     @Test
+    void storingWithLintRefusesALabelTheHeadCannotPrint() throws Exception {
+        Http client = harness().client();
+        String tall = CARTON.replace("LABEL carton 104", "LABEL carton 208");
+        Http.Answer refused = client.putJson("/labels/carton?lint=true", Map.of("source", tall));
+        assertThat(refused.status()).isEqualTo(400);
+        assertThat(refused.json().get("detail").asText())
+                .isEqualTo("carton cannot print, label: the label is 208 dots high and the head reaches 104");
+        assertThat(client.get("/labels/carton").status()).isEqualTo(404);
+
+        Http.Answer twoPens = client.putJson("/labels/carton?lint=true&pens=2", Map.of("source", tall));
+        assertThat(twoPens.status()).isEqualTo(201);
+    }
+
+    @Test
+    void storingWithoutLintTakesAnyLabelThatParses() throws Exception {
+        String tall = CARTON.replace("LABEL carton 104", "LABEL carton 208");
+        Http.Answer stored = harness().client().putJson("/labels/carton", Map.of("source", tall));
+        assertThat(stored.status()).isEqualTo(201);
+    }
+
+    @Test
+    void storingWithLintOnAHeadThatCannotExist() throws Exception {
+        Http client = harness().client();
+        assertThat(client.putJson("/labels/carton?lint=true&pens=9", Map.of("source", CARTON))
+                        .status())
+                .isEqualTo(422);
+        assertThat(client.putJson("/labels/carton?lint=true&dpi=250", Map.of("source", CARTON))
+                        .status())
+                .isEqualTo(400);
+    }
+
+    @Test
     void anUnknownLabel() throws Exception {
         Http client = harness().client();
         assertThat(client.get("/labels/ghost").status()).isEqualTo(404);

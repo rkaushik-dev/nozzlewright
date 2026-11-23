@@ -24,6 +24,9 @@ import java.util.stream.Collectors;
  */
 public record HeadGeometry(String family, int horizontalDpi, int verticalDpi, List<GroupGeometry> groups) {
 
+    /** The family a desk check builds its head as when no machine was read. */
+    public static final String DESK_FAMILY = "HVX8PEN";
+
     /** Copies the groups. */
     public HeadGeometry {
         groups = List.copyOf(groups);

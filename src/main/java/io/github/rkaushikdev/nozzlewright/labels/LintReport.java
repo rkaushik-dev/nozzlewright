@@ -1,10 +1,12 @@
 package io.github.rkaushikdev.nozzlewright.labels;
 
+import io.github.rkaushikdev.nozzlewright.LabelError;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Everything {@link Lint} found about one label.
@@ -27,6 +29,22 @@ public record LintReport(String label, List<Finding> findings) {
     /** True when nothing would stop this label printing. */
     public boolean ok() {
         return findings.stream().noneMatch(item -> item.grade().blocks());
+    }
+
+    /**
+     * Refuse a label that cannot print.
+     *
+     * @throws LabelError naming every finding that stops it, worst first
+     */
+    public void requirePrintable() {
+        if (ok()) {
+            return;
+        }
+        String reasons = sorted().stream()
+                .filter(item -> item.grade().blocks())
+                .map(item -> item.where() + ": " + item.message())
+                .collect(Collectors.joining(", and "));
+        throw new LabelError(label + " cannot print, " + reasons);
     }
 
     /** True when there is nothing to say at all. */

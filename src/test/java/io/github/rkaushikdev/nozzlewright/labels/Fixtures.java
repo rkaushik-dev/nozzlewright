@@ -16,9 +16,7 @@ final class Fixtures {
 
     /** A store holding the standard family built from the stock 5x7. */
     static FontStore standardFonts() {
-        FontStore fonts = new FontStore();
-        FontOps.registerStandardFamily(fonts, FontData.FIVE_BY_SEVEN);
-        return fonts;
+        return FontStore.stock();
     }
 
     /** A matrix drawn from hash and dot rows, top first. */

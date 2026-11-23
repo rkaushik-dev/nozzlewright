@@ -7,21 +7,17 @@ import io.github.rkaushikdev.nozzlewright.labels.DotMatrix;
 import io.github.rkaushikdev.nozzlewright.labels.Element;
 import io.github.rkaushikdev.nozzlewright.labels.Field;
 import io.github.rkaushikdev.nozzlewright.labels.FieldContext;
-import io.github.rkaushikdev.nozzlewright.labels.FontData;
-import io.github.rkaushikdev.nozzlewright.labels.FontOps;
 import io.github.rkaushikdev.nozzlewright.labels.FontStore;
 import io.github.rkaushikdev.nozzlewright.labels.LabelDiff;
 import io.github.rkaushikdev.nozzlewright.labels.LabelRecord;
 import io.github.rkaushikdev.nozzlewright.labels.LabelStore;
 import io.github.rkaushikdev.nozzlewright.labels.LabelTemplate;
-import io.github.rkaushikdev.nozzlewright.labels.Lint;
 import io.github.rkaushikdev.nozzlewright.labels.LintReport;
 import io.github.rkaushikdev.nozzlewright.labels.Proof;
 import io.github.rkaushikdev.nozzlewright.labels.ProofOptions;
 import io.github.rkaushikdev.nozzlewright.labels.Raster;
 import io.github.rkaushikdev.nozzlewright.labels.ShiftWindow;
 import io.github.rkaushikdev.nozzlewright.printer.CartridgeSpec;
-import io.github.rkaushikdev.nozzlewright.printer.HeadGeometry;
 import io.github.rkaushikdev.nozzlewright.printer.InkFamily;
 import io.github.rkaushikdev.nozzlewright.util.Repr;
 import java.nio.file.Path;
@@ -34,6 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
@@ -73,9 +70,7 @@ final class LabelCommands extends Group {
 
     /** The fonts a machine ships with. */
     static FontStore defaultFonts() {
-        FontStore store = new FontStore();
-        FontOps.registerStandardFamily(store, FontData.FIVE_BY_SEVEN);
-        return store;
+        return FontStore.stock();
     }
 
     /**
@@ -148,20 +143,8 @@ final class LabelCommands extends Group {
         @Parameters(index = "0", paramLabel = "SOURCE", description = "A label file.")
         private Path source;
 
-        @Option(names = "--lint", description = "Check it against a head as well, and exit 1 if it cannot print.")
-        private boolean lint;
-
-        @Option(names = "--pens", defaultValue = "1", description = "Pens stacked on the head, for --lint.")
-        private int pens;
-
-        @Option(names = "--dpi", defaultValue = "300", description = "Firing rate along the product, for --lint.")
-        private int dpi;
-
-        @Option(names = "--at", defaultValue = "", description = "Render dates as if it were this moment.")
-        private String at;
-
-        @Option(names = "--answer", description = "Answer a prompt, as name=value.")
-        private List<String> answer = new ArrayList<>();
+        @Mixin
+        private DeskLint lint;
 
         @Option(names = "--json", description = "Print the lint report as JSON.")
         private boolean asJson;
@@ -169,13 +152,11 @@ final class LabelCommands extends Group {
         @Override
         public Integer call() {
             LabelTemplate template = parseFile(source);
-            if (!lint) {
+            if (!lint.enabled) {
                 describe(template);
                 return Main.OK;
             }
-            HeadGeometry head = HeadGeometry.stacked(PrinterCommands.FALLBACK_FAMILY, pens, dpi);
-            head.validate();
-            LintReport report = Lint.check(template, defaultFonts(), head, whenOrNow(at), prompts(answer));
+            LintReport report = lint.check(template);
             if (asJson) {
                 Output.emit(out(), report.asMap(), true);
             } else {
@@ -359,9 +340,15 @@ final class LabelCommands extends Group {
         @Parameters(index = "0", paramLabel = "SOURCE", description = "A label file to store.")
         private Path source;
 
+        @Mixin
+        private DeskLint lint;
+
         @Override
         public Integer call() {
             LabelTemplate template = parseFile(source);
+            if (lint.enabled) {
+                lint.check(template).requirePrintable();
+            }
             LabelRecord record = store(context()).save(template);
             out().println("saved " + record.name() + " at revision " + record.revision());
             return Main.OK;

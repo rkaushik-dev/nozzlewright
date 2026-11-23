@@ -4,6 +4,7 @@ import static io.github.rkaushikdev.nozzlewright.labels.Fixtures.standardFonts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.rkaushikdev.nozzlewright.LabelError;
 import io.github.rkaushikdev.nozzlewright.printer.HeadGeometry;
 import io.github.rkaushikdev.nozzlewright.smoke.Smoke;
 import java.time.LocalDateTime;
@@ -165,6 +166,27 @@ class LintTest {
         LintReport accented = check(source.replace("lot-4a", "caf\u00e9"));
         assertThat(accented.of(Grade.STOP))
                 .anySatisfy(item -> assertThat(item.where()).isEqualTo("code"));
+    }
+
+    @Test
+    void aPrintableLabelPassesRequirePrintable() {
+        check(GOOD.replace("height=40", "height=12")).requirePrintable();
+    }
+
+    @Test
+    void requirePrintableNamesEveryStop() {
+        LintReport report = check(GOOD.replace("LABEL carton 104", "LABEL carton 300")
+                .replace("FIELD brand TEXT HALVEX", "FIELD brand EXPIRY MM/YY days=5"));
+        assertThatThrownBy(report::requirePrintable)
+                .isInstanceOf(LabelError.class)
+                .hasMessageStartingWith("carton cannot print, ")
+                .hasMessageContaining("brand: a best before 5 days out")
+                .hasMessageContaining(", and label: the label is 300 dots high");
+    }
+
+    @Test
+    void theStockFontsAreTheStandardFamily() {
+        assertThat(FontStore.stock().names()).containsExactly("10x14", "15x21", "20x28", "5x7", "5x7b");
     }
 
     @Test
