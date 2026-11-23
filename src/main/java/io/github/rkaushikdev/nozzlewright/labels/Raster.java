@@ -126,17 +126,66 @@ public final class Raster {
         matrix.fill(x, y + element.heightDots() - thickness, width, thickness);
     }
 
+    /**
+     * Where every element of {@code label} lands, in template order.
+     *
+     * @throws LabelError when an element cannot be measured, for the same reasons it cannot be drawn
+     */
+    public static List<Footprint> footprints(ResolvedLabel label, FontStore fonts) {
+        List<Footprint> footprints = new ArrayList<>();
+        for (ResolvedElement resolved : label.elements()) {
+            Element element = resolved.element();
+            int x = element.placement().x();
+            int y = element.placement().y();
+            footprints.add(
+                    switch (element) {
+                        case TextElement text -> {
+                            BitmapFont font = fonts.get(text.font());
+                            yield Footprint.of(
+                                    text.name(),
+                                    x,
+                                    y,
+                                    font.columnsFor(resolved.text()).size(),
+                                    font.height());
+                        }
+                        case BarcodeElement barcode -> {
+                            int zone = barcode.printedAs()
+                                            .map(Symbology::quietZoneModules)
+                                            .orElse(0)
+                                    * barcode.moduleDots();
+                            int width = modulesFor(barcode, resolved.text()).size() * barcode.moduleDots();
+                            yield new Footprint(
+                                    barcode.name(),
+                                    x,
+                                    y,
+                                    width,
+                                    barcodeHeight(barcode, fonts),
+                                    zone,
+                                    barcode.heightDots());
+                        }
+                        case RuleElement rule -> Footprint.of(rule.name(), x, y, rule.widthDots(), rule.heightDots());
+                        default -> Footprint.of(element.name(), x, y, 0, 0);
+                    });
+        }
+        return List.copyOf(footprints);
+    }
+
+    /** Rows a barcode covers: its bars, and its human readable line when it prints one. */
+    private static int barcodeHeight(BarcodeElement element, FontStore fonts) {
+        if (!element.humanReadable()) {
+            return element.heightDots();
+        }
+        return element.heightDots()
+                + HUMAN_READABLE_GAP
+                + fonts.get(element.textFont()).height();
+    }
+
     private static void renderBarcode(
             DotMatrix matrix, BarcodeElement element, String text, FontStore fonts, int heightDots) {
         if (text.isEmpty()) {
             throw new LabelError("barcode " + element.name() + " has nothing to encode");
         }
-        int totalHeight = element.heightDots();
-        BitmapFont captionFont = null;
-        if (element.humanReadable()) {
-            captionFont = fonts.get(element.textFont());
-            totalHeight += HUMAN_READABLE_GAP + captionFont.height();
-        }
+        int totalHeight = barcodeHeight(element, fonts);
         int y = element.placement().y();
         if (y + totalHeight > heightDots) {
             throw new LabelError("barcode " + element.name() + " needs " + totalHeight + " dots and the label has "
@@ -153,9 +202,9 @@ public final class Raster {
             drawBearers(matrix, element, columns.size());
         }
 
-        if (captionFont != null) {
+        if (element.humanReadable()) {
             int captionY = y + element.heightDots() + HUMAN_READABLE_GAP;
-            List<BigInteger> caption = captionFont.columnsFor(text);
+            List<BigInteger> caption = fonts.get(element.textFont()).columnsFor(text);
             int offset = Math.max(Math.floorDiv(columns.size() - caption.size(), 2), 0);
             matrix.blit(caption, element.placement().x() + offset, captionY);
         }

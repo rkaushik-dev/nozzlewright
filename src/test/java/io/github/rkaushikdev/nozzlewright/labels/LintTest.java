@@ -160,6 +160,23 @@ class LintTest {
     }
 
     @Test
+    void textInsideABarcodeQuietZoneIsAWarning() {
+        LintReport report = check(GOOD.replace("END\n", "TEXT lot 0,60 brand font=5x7\nEND\n"));
+        assertThat(report.ok()).isTrue();
+        assertThat(report.of(Grade.WARN)).anySatisfy(item -> {
+            assertThat(item.where()).isEqualTo("code");
+            assertThat(item.message())
+                    .isEqualTo("lot prints inside the quiet zone, which is 30 dots either" + " side of the bars");
+        });
+    }
+
+    @Test
+    void textClearOfTheQuietZoneIsFine() {
+        LintReport report = check(GOOD);
+        assertThat(anyMessage(report.findings(), "quiet zone")).isFalse();
+    }
+
+    @Test
     void aShortBarcodeIsAWarning() {
         LintReport report = check(GOOD.replace("height=40", "height=12"));
         assertThat(anyMessage(report.of(Grade.WARN), "aim a scanner")).isTrue();

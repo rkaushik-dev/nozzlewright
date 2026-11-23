@@ -59,6 +59,15 @@ public enum Symbology {
         return this == GS1_128;
     }
 
+    /** Modules of quiet zone the symbol carries at each end. */
+    public int quietZoneModules() {
+        return switch (this) {
+            case CODE128, GS1_128 -> Code128.QUIET_ZONE_MODULES;
+            case CODE39 -> Code39.QUIET_ZONE_MODULES;
+            case ITF14 -> Itf14.QUIET_ZONE_MODULES;
+        };
+    }
+
     /**
      * Check that this symbology can carry {@code data}, without drawing it.
      *

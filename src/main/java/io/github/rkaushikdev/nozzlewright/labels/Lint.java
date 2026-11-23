@@ -41,6 +41,9 @@ public final class Lint {
     /** The answer length assumed for an interactive field that states no limit. */
     private static final int DEFAULT_ANSWER_LENGTH = 8;
 
+    /** Past this many columns a message is long enough that somebody should check it fits the pack. */
+    private static final int LONG_MESSAGE_DOTS = 2000;
+
     /** Past this fraction of the message area firing, the ink bill is worth mentioning. */
     private static final double HEAVY_COVERAGE = 0.45;
 
@@ -274,18 +277,21 @@ public final class Lint {
                 .prompts(worstCaseAnswers(template, answers))
                 .build();
         DotMatrix matrix;
+        List<Footprint> footprints;
         try {
-            matrix = Raster.render(template.resolve(context), fonts);
+            ResolvedLabel resolved = template.resolve(context);
+            matrix = Raster.render(resolved, fonts);
+            footprints = Raster.footprints(resolved, fonts);
         } catch (RuntimeException error) {
             return List.of(new Finding(Grade.STOP, "render", Objects.requireNonNullElse(error.getMessage(), "")));
         }
 
-        List<Finding> findings = new ArrayList<>();
+        List<Finding> findings = new ArrayList<>(checkQuietZones(footprints));
         double widthMm = head.dotsToMm(matrix.width());
         if (matrix.isEmpty()) {
             findings.add(new Finding(Grade.STOP, "render", "the message prints nothing"));
         }
-        if (matrix.width() > Code128.QUIET_ZONE_MODULES * 200) {
+        if (matrix.width() > LONG_MESSAGE_DOTS) {
             findings.add(new Finding(
                     Grade.WARN,
                     "render",
@@ -297,6 +303,28 @@ public final class Lint {
                     Grade.NOTE,
                     "render",
                     "coverage is " + Numbers.fixed(coverage * 100, 0) + "%, which is heavy on ink"));
+        }
+        return findings;
+    }
+
+    /**
+     * Anything printed inside a barcode's quiet zone.
+     *
+     * <p>A warning rather than a stop, because a scanner held square to a carton may still read past
+     * a stray character, but a fixed scanner over a conveyor usually will not.
+     */
+    private static List<Finding> checkQuietZones(List<Footprint> footprints) {
+        List<Finding> findings = new ArrayList<>();
+        for (Footprint barcode : footprints) {
+            for (Footprint other : footprints) {
+                if (other != barcode && barcode.intrudedBy(other)) {
+                    findings.add(new Finding(
+                            Grade.WARN,
+                            barcode.element(),
+                            other.element() + " prints inside the quiet zone, which is " + barcode.quietZone()
+                                    + " dots either side of the bars"));
+                }
+            }
         }
         return findings;
     }
