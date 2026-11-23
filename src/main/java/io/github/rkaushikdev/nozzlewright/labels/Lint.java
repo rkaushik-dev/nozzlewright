@@ -5,6 +5,7 @@ import io.github.rkaushikdev.nozzlewright.printer.Axis;
 import io.github.rkaushikdev.nozzlewright.printer.HeadGeometry;
 import io.github.rkaushikdev.nozzlewright.util.Numbers;
 import io.github.rkaushikdev.nozzlewright.util.Repr;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -77,7 +78,7 @@ public final class Lint {
         List<Finding> findings = new ArrayList<>();
         findings.addAll(checkHeight(template, head));
         findings.addAll(checkElements(template, fonts, head));
-        findings.addAll(checkDatePatterns(template));
+        findings.addAll(checkDateFields(template, now));
         findings.addAll(checkRender(template, fonts, head, now, answers));
         return new LintReport(template.name(), findings);
     }
@@ -104,6 +105,24 @@ public final class Lint {
         return List.of();
     }
 
+    /** The date fields: the week code rule for every one, the shelf life rule for expiries. */
+    private static List<Finding> checkDateFields(LabelTemplate template, LocalDateTime now) {
+        List<Finding> findings = new ArrayList<>();
+        for (Field field : template.fields()) {
+            switch (field) {
+                case DateField date -> findings.addAll(checkWeekYear(date.name(), date.pattern()));
+                case ExpiryField expiry -> {
+                    findings.addAll(checkWeekYear(expiry.name(), expiry.pattern()));
+                    findings.addAll(checkShelfLifeFormat(expiry, now.toLocalDate()));
+                }
+                default -> {
+                    // Only date and expiry fields print a date.
+                }
+            }
+        }
+        return findings;
+    }
+
     /**
      * A week number printed beside the calendar year.
      *
@@ -112,25 +131,60 @@ public final class Lint {
      * YYWW} prints a week code a whole year out for a few days every winter. The week based year
      * tokens {@code GG} and {@code GGGG} are what goes with {@code WW}.
      */
-    private static List<Finding> checkDatePatterns(LabelTemplate template) {
-        List<Finding> findings = new ArrayList<>();
-        for (Field field : template.fields()) {
-            String pattern =
-                    switch (field) {
-                        case DateField date -> date.pattern();
-                        case ExpiryField expiry -> expiry.pattern();
-                        default -> "";
-                    };
-            List<String> tokens = DateCode.tokensIn(pattern);
-            boolean calendarYear = tokens.stream().anyMatch(token -> token.startsWith("Y"));
-            if (tokens.contains("WW") && calendarYear) {
-                findings.add(new Finding(
-                        Grade.WARN,
-                        field.name(),
-                        "WW beside the calendar year prints the wrong year around New Year, use GG or GGGG"));
-            }
+    private static List<Finding> checkWeekYear(String where, String pattern) {
+        List<String> tokens = DateCode.tokensIn(pattern);
+        boolean calendarYear = tokens.stream().anyMatch(token -> token.startsWith("Y"));
+        if (!tokens.contains("WW") || !calendarYear) {
+            return List.of();
         }
-        return findings;
+        return List.of(new Finding(
+                Grade.WARN,
+                where,
+                "WW beside the calendar year prints the wrong year around New Year, use GG or GGGG"));
+    }
+
+    /**
+     * Whether a best before says as much as the food labelling rules ask for its shelf life.
+     *
+     * <p>Under the EU food information rules a best before for food that keeps under three months
+     * needs the day and the month, one that keeps three to eighteen months needs the month and the
+     * year, and past eighteen months the year is enough. Fewer parts than that is a pack that cannot
+     * legally be sold, so it is a stop. The day has to be the day of the month: a Julian day number is
+     * a lot code, not a date a shopper can read. The shelf life is measured from the lint moment, with
+     * any rounding to the month end counted in.
+     */
+    private static List<Finding> checkShelfLifeFormat(ExpiryField expiry, LocalDate coded) {
+        LocalDate expires;
+        try {
+            expires = expiry.shelfLife().apply(coded);
+        } catch (LabelError error) {
+            return List.of();
+        }
+        List<String> tokens = DateCode.tokensIn(expiry.pattern());
+        boolean day = tokens.contains("DD");
+        boolean month = tokens.contains("MM") || tokens.contains("MMM");
+        boolean year = tokens.contains("YYYY") || tokens.contains("YY");
+        String needs;
+        boolean enough;
+        if (expires.isBefore(coded.plusMonths(3))) {
+            needs = "the day and the month";
+            enough = day && month;
+        } else if (!expires.isAfter(coded.plusMonths(18))) {
+            needs = "the month and the year";
+            enough = month && year;
+        } else {
+            needs = "the year";
+            enough = year;
+        }
+        if (enough) {
+            return List.of();
+        }
+        long days = expires.toEpochDay() - coded.toEpochDay();
+        return List.of(new Finding(
+                Grade.STOP,
+                expiry.name(),
+                "a best before " + days + " days out has to show " + needs + ", " + Repr.of(expiry.pattern())
+                        + " does not"));
     }
 
     /** Per element checks that do not need the message rendered. */

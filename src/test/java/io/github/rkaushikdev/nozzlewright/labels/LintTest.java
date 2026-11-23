@@ -92,6 +92,68 @@ class LintTest {
         assertThat(anyMessage(report.of(Grade.WARN), "New Year")).isTrue();
     }
 
+    static LintReport withExpiry(String definition) {
+        return check(GOOD.replace("FIELD brand TEXT HALVEX", "FIELD brand EXPIRY " + definition));
+    }
+
+    static boolean shelfLifeStop(LintReport report) {
+        return report.of(Grade.STOP).stream()
+                .anyMatch(item -> item.where().equals("brand") && item.message().startsWith("a best before"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {"DD/MM days=21", "DD.MMM months=2", "MM/YY months=6", "MMM/YYYY months=18", "YYYY months=24"})
+    void aBestBeforeThatSaysEnoughForItsShelfLife(String definition) {
+        assertThat(shelfLifeStop(withExpiry(definition))).isFalse();
+    }
+
+    @Test
+    void aShortShelfLifeNeedsTheDay() {
+        LintReport report = withExpiry("MM/YYYY days=21");
+        assertThat(report.ok()).isFalse();
+        assertThat(report.of(Grade.STOP)).anySatisfy(item -> assertThat(item.message())
+                .isEqualTo("a best before 21 days out has to show the day and the month, 'MM/YYYY' does not"));
+    }
+
+    @Test
+    void aMediumShelfLifeNeedsTheYear() {
+        LintReport report = withExpiry("DD/MM months=6");
+        assertThat(anyMessage(report.of(Grade.STOP), "has to show the month and the year"))
+                .isTrue();
+    }
+
+    @Test
+    void aLongShelfLifeNeedsAtLeastTheYear() {
+        LintReport report = withExpiry("DD/MM months=19");
+        assertThat(anyMessage(report.of(Grade.STOP), "has to show the year")).isTrue();
+    }
+
+    @Test
+    void aJulianDayIsNotADayAShopperCanRead() {
+        assertThat(shelfLifeStop(withExpiry("YYJJJ days=10"))).isTrue();
+    }
+
+    @Test
+    void roundingToTheMonthEndCountsTowardsTheShelfLife() {
+        // 21st of April plus two months and twenty days is the 10th of July, under three months. Rounded to the
+        // month end it is the 31st of July, which is over three months and only needs the month and the year.
+        assertThat(shelfLifeStop(withExpiry("MM/YY months=2 days=20"))).isTrue();
+        assertThat(shelfLifeStop(withExpiry("MM/YY months=2 days=20 round=month")))
+                .isFalse();
+    }
+
+    @Test
+    void theShelfLifeIsMeasuredFromTheLintMoment() {
+        LabelTemplate template =
+                LabelTemplate.parse(GOOD.replace("FIELD brand TEXT HALVEX", "FIELD brand EXPIRY MM/YY days=89"));
+        LintReport february = Lint.check(template, standardFonts(), head(), LocalDateTime.of(2025, 2, 1, 9, 0));
+        LintReport july = Lint.check(template, standardFonts(), head(), LocalDateTime.of(2025, 7, 1, 9, 0));
+        assertThat(anyMessage(february.of(Grade.STOP), "a best before 89 days out"))
+                .isFalse();
+        assertThat(anyMessage(july.of(Grade.STOP), "a best before 89 days out")).isTrue();
+    }
+
     @Test
     void gradesThatBlock() {
         assertThat(Grade.STOP.blocks()).isTrue();
