@@ -238,6 +238,21 @@ class LintTest {
     }
 
     @Test
+    void aUseByAlwaysNeedsTheDayAndTheMonth() {
+        LintReport report = withExpiry("MM/YY months=4 mark=use_by");
+        assertThat(report.of(Grade.STOP)).anySatisfy(item -> assertThat(item.message())
+                .startsWith("a use by ")
+                .endsWith("has to show the day and the month, 'MM/YY' does not"));
+        assertThat(shelfLifeStop(withExpiry("DD/MM/YY months=4 mark=USE_BY"))).isFalse();
+    }
+
+    @Test
+    void theSameDateAsABestBeforeOnlyNeedsTheMonthAndYear() {
+        assertThat(shelfLifeStop(withExpiry("MM/YY months=4"))).isFalse();
+        assertThat(shelfLifeStop(withExpiry("MM/YY months=4 mark=best_before"))).isFalse();
+    }
+
+    @Test
     void gradesThatBlock() {
         assertThat(Grade.STOP.blocks()).isTrue();
         assertThat(Grade.WARN.blocks()).isFalse();

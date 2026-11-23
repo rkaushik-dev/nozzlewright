@@ -1,11 +1,8 @@
 package io.github.rkaushikdev.nozzlewright.labels;
 
 import io.github.rkaushikdev.nozzlewright.LabelError;
-import io.github.rkaushikdev.nozzlewright.util.Repr;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.util.Arrays;
-import java.util.Locale;
 
 /**
  * How far a best before or use by date lies from the day the product is coded.
@@ -30,7 +27,7 @@ public record ShelfLife(int months, int days, Rounding rounding) {
 
         /** The word the stored format uses, lower case. */
         public String word() {
-            return name().toLowerCase(Locale.ROOT);
+            return OptionWords.word(this);
         }
 
         /**
@@ -39,10 +36,7 @@ public record ShelfLife(int months, int days, Rounding rounding) {
          * @throws LabelError when the word is not a rounding
          */
         public static Rounding parse(String text) {
-            return Arrays.stream(values())
-                    .filter(item -> item.word().equals(text.toLowerCase(Locale.ROOT)))
-                    .findFirst()
-                    .orElseThrow(() -> new LabelError("round=" + Repr.of(text) + " is not none or month"));
+            return OptionWords.parse(Rounding.class, "round", text);
         }
     }
 

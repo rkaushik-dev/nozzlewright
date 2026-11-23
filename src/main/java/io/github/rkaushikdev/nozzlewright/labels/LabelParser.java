@@ -169,7 +169,12 @@ final class LabelParser {
                         options.intValue("months", 0),
                         options.intValue("days", 0),
                         options.word("round", "none", ShelfLife.Rounding::parse));
-                return new ExpiryField(name, rest.get(0), life, options.word("day", "clock", Dating::parse));
+                return new ExpiryField(
+                        name,
+                        rest.get(0),
+                        life,
+                        options.word("day", "clock", Dating::parse),
+                        options.word("mark", "best_before", ExpiryField.Marking::parse));
             }
             case "COUNTER" -> {
                 LineOptions options = LineOptions.read(rest, lineNumber);

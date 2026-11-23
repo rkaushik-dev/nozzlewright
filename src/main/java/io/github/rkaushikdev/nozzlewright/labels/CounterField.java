@@ -1,12 +1,10 @@
 package io.github.rkaushikdev.nozzlewright.labels;
 
 import io.github.rkaushikdev.nozzlewright.LabelError;
-import io.github.rkaushikdev.nozzlewright.util.Repr;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.OptionalLong;
 
@@ -52,7 +50,7 @@ public final class CounterField extends Field {
 
         /** The word the stored format writes after {@code reset=}, lower case. */
         public String word() {
-            return name().toLowerCase(Locale.ROOT);
+            return OptionWords.word(this);
         }
 
         /**
@@ -61,12 +59,7 @@ public final class CounterField extends Field {
          * @throws LabelError when the word is not never or day
          */
         public static Reset parse(String text) {
-            for (Reset item : values()) {
-                if (item.word().equals(text.toLowerCase(Locale.ROOT))) {
-                    return item;
-                }
-            }
-            throw new LabelError("reset=" + Repr.of(text) + " is not never or day");
+            return OptionWords.parse(Reset.class, "reset", text);
         }
     }
 

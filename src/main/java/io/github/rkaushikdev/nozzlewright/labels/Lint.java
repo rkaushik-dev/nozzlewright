@@ -150,7 +150,8 @@ public final class Lint {
      * year, and past eighteen months the year is enough. Fewer parts than that is a pack that cannot
      * legally be sold, so it is a stop. The day has to be the day of the month: a Julian day number is
      * a lot code, not a date a shopper can read. The shelf life is measured from the lint moment, with
-     * any rounding to the month end counted in.
+     * any rounding to the month end counted in. A use by needs the day and the month whatever the shelf
+     * life, because it is the date the food stops being safe.
      */
     private static List<Finding> checkShelfLifeFormat(ExpiryField expiry, LocalDate coded) {
         LocalDate expires;
@@ -165,7 +166,7 @@ public final class Lint {
         boolean year = tokens.contains("YYYY") || tokens.contains("YY");
         String needs;
         boolean enough;
-        if (expires.isBefore(coded.plusMonths(3))) {
+        if (expiry.marking() == ExpiryField.Marking.USE_BY || expires.isBefore(coded.plusMonths(3))) {
             needs = "the day and the month";
             enough = day && month;
         } else if (!expires.isAfter(coded.plusMonths(18))) {
@@ -182,7 +183,8 @@ public final class Lint {
         return List.of(new Finding(
                 Grade.STOP,
                 expiry.name(),
-                "a best before " + days + " days out has to show " + needs + ", " + Repr.of(expiry.pattern())
+                "a " + (expiry.marking() == ExpiryField.Marking.USE_BY ? "use by" : "best before") + " " + days
+                        + " days out has to show " + needs + ", " + Repr.of(expiry.pattern())
                         + " does not"));
     }
 

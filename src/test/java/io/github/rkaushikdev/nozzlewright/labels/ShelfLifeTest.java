@@ -87,4 +87,32 @@ class ShelfLifeTest {
                 .hasMessageStartingWith("line 3: ")
                 .hasMessageContaining("round='week'");
     }
+
+    @Test
+    void theMarkingIsStoredAndCompared() {
+        LabelTemplate template =
+                LabelTemplate.parse("LABEL ub 8\nFIELD u EXPIRY DD/MM months=1 mark=Use_By\nTEXT t 0,0 u\nEND\n");
+        ExpiryField field = (ExpiryField) template.field("u");
+        assertThat(field.marking()).isEqualTo(ExpiryField.Marking.USE_BY);
+        assertThat(field.toSource()).isEqualTo("FIELD u EXPIRY DD/MM months=1 mark=use_by");
+        assertThat(field.attributes()).containsEntry("mark", "use_by");
+        assertThat(new ExpiryField("b", "DD/MM", 3, 0).marking()).isEqualTo(ExpiryField.Marking.BEST_BEFORE);
+        assertThat(new ExpiryField("b", "DD/MM", 3, 0).toSource()).doesNotContain("mark=");
+    }
+
+    @Test
+    void anUnknownMarkingNamesTheWordsItTakes() {
+        assertThatThrownBy(() -> LabelTemplate.parse(
+                        "LABEL ub 8\nFIELD u EXPIRY DD/MM months=1 mark=sell_by\nTEXT t 0,0 u\nEND\n"))
+                .isInstanceOf(LabelError.class)
+                .hasMessage("line 2: mark='sell_by' is not best_before or use_by");
+    }
+
+    @Test
+    void optionWordsListEveryChoice() {
+        assertThatThrownBy(() -> OptionWords.parse(Grade.class, "grade", "loud"))
+                .isInstanceOf(LabelError.class)
+                .hasMessage("grade='loud' is not stop, warn or note");
+        assertThat(OptionWords.parse(Grade.class, "grade", "WARN")).isEqualTo(Grade.WARN);
+    }
 }

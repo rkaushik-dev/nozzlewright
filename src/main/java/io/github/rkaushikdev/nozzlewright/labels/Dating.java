@@ -1,10 +1,7 @@
 package io.github.rkaushikdev.nozzlewright.labels;
 
 import io.github.rkaushikdev.nozzlewright.LabelError;
-import io.github.rkaushikdev.nozzlewright.util.Repr;
 import java.time.LocalDate;
-import java.util.Arrays;
-import java.util.Locale;
 
 /**
  * Which day a date field counts from.
@@ -23,7 +20,7 @@ public enum Dating {
 
     /** The word the stored format writes after {@code day=}, lower case. */
     public String word() {
-        return name().toLowerCase(Locale.ROOT);
+        return OptionWords.word(this);
     }
 
     /** The day product coded now is dated by. */
@@ -40,9 +37,6 @@ public enum Dating {
      * @throws LabelError when the word is not clock or shift
      */
     public static Dating parse(String text) {
-        return Arrays.stream(values())
-                .filter(item -> item.word().equals(text.toLowerCase(Locale.ROOT)))
-                .findFirst()
-                .orElseThrow(() -> new LabelError("day=" + Repr.of(text) + " is not clock or shift"));
+        return OptionWords.parse(Dating.class, "day", text);
     }
 }

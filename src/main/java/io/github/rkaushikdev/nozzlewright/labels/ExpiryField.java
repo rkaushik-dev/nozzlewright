@@ -20,6 +20,35 @@ public final class ExpiryField extends Field {
     private final String pattern;
     private final ShelfLife shelfLife;
     private final Dating dating;
+    private final Marking marking;
+
+    /**
+     * Which of the two food dates this is.
+     *
+     * <p>A best before says when the food stops being at its best and can carry less of the date the
+     * longer it keeps. A use by is a safety date on food that goes off quickly, and always carries the
+     * day and the month.
+     */
+    public enum Marking {
+        /** A quality date. */
+        BEST_BEFORE,
+        /** A safety date. */
+        USE_BY;
+
+        /** The word the stored format writes after {@code mark=}. */
+        public String word() {
+            return OptionWords.word(this);
+        }
+
+        /**
+         * The marking a stored word names.
+         *
+         * @throws LabelError when the word is not best_before or use_by
+         */
+        public static Marking parse(String text) {
+            return OptionWords.parse(Marking.class, "mark", text);
+        }
+    }
 
     /** A field rendering {@code pattern} at today plus {@code months} and {@code days}. */
     public ExpiryField(String name, String pattern, int days, int months) {
@@ -33,10 +62,21 @@ public final class ExpiryField extends Field {
 
     /** A field rendering {@code pattern} at the day {@code dating} picks, moved on by {@code shelfLife}. */
     public ExpiryField(String name, String pattern, ShelfLife shelfLife, Dating dating) {
+        this(name, pattern, shelfLife, dating, Marking.BEST_BEFORE);
+    }
+
+    /** A field with every setting given, including which food date it is. */
+    public ExpiryField(String name, String pattern, ShelfLife shelfLife, Dating dating, Marking marking) {
         super(name);
         this.pattern = pattern;
         this.shelfLife = shelfLife;
         this.dating = dating;
+        this.marking = marking;
+    }
+
+    /** Whether this is a best before or a use by. */
+    public Marking marking() {
+        return marking;
     }
 
     /** Which day the shelf life counts from. */
@@ -97,6 +137,9 @@ public final class ExpiryField extends Field {
         if (dating != Dating.CLOCK) {
             parts.add("day=" + dating.word());
         }
+        if (marking != Marking.BEST_BEFORE) {
+            parts.add("mark=" + marking.word());
+        }
         return String.join(" ", parts);
     }
 
@@ -108,6 +151,7 @@ public final class ExpiryField extends Field {
         attributes.put("months", shelfLife.months());
         attributes.put("round", shelfLife.rounding().word());
         attributes.put("day", dating.word());
+        attributes.put("mark", marking.word());
         return Collections.unmodifiableMap(attributes);
     }
 }
