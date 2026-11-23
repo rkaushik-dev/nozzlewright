@@ -11,11 +11,13 @@ import io.github.rkaushikdev.nozzlewright.fleet.PollResult;
 import io.github.rkaushikdev.nozzlewright.fleet.PrinterRecord;
 import io.github.rkaushikdev.nozzlewright.labels.ShiftWindow;
 import io.github.rkaushikdev.nozzlewright.printer.Alarms;
+import io.github.rkaushikdev.nozzlewright.printer.InkReading;
 import io.github.rkaushikdev.nozzlewright.printer.JobOutcome;
 import io.github.rkaushikdev.nozzlewright.printer.JobResult;
 import io.github.rkaushikdev.nozzlewright.printer.MachineState;
 import io.github.rkaushikdev.nozzlewright.printer.PrinterStatus;
 import io.github.rkaushikdev.nozzlewright.storage.AlarmRepo;
+import io.github.rkaushikdev.nozzlewright.storage.CartridgeRepo;
 import io.github.rkaushikdev.nozzlewright.storage.Database;
 import io.github.rkaushikdev.nozzlewright.storage.JobRepo;
 import io.github.rkaushikdev.nozzlewright.storage.Printer;
@@ -233,6 +235,35 @@ class CliFleetTest {
         JsonNode body = json(invoke(tmp, "fleet", "runs", "line4", "--json").stdout());
         assertThat(body.get(0).get("label").asText()).isEqualTo("carton");
         assertThat(body.get(0).get("printed").asInt()).isEqualTo(400);
+    }
+
+    @Test
+    void reorderListsTheCartridgesComingOut() throws Exception {
+        try (Database database = Database.file(tmp.resolve(Context.DATABASE_NAME))) {
+            database.createAll();
+            database.run(unit -> {
+                Printer line4 = new PrinterRepo(unit).upsert(new PrinterRecord("line4", "10.4.0.21:9100"));
+                new CartridgeRepo(unit).observe(line4, List.of(new InkReading(1, 90, "M1", "HVX-42", "MEK")), START);
+            });
+        }
+        Cli.Result text = invoke(tmp, "fleet", "cost", "--reorder", "30");
+        assertThat(text.exitCode()).isZero();
+        assertThat(text.stdout())
+                .contains("printer_id=line4  pen=1  serial=M1  part_number=HVX-42  level=90  due_on=2025-07-09")
+                .contains("reason=service life")
+                .contains("order part=HVX-42  count=1");
+        JsonNode body =
+                json(invoke(tmp, "fleet", "cost", "--reorder", "30", "--json").stdout());
+        assertThat(body.get("days").asInt()).isEqualTo(30);
+        assertThat(body.get("order").get("HVX-42").asInt()).isEqualTo(1);
+    }
+
+    @Test
+    void reorderWithNothingDueSaysSo() {
+        seed();
+        Cli.Result result = invoke(tmp, "fleet", "cost", "--reorder", "7");
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.stdout()).contains("no cartridge is due out in the next 7 days");
     }
 
     @Test

@@ -113,7 +113,7 @@ public final class Cartridge {
 
     /** Last day this cartridge may stay in service. */
     public LocalDate expiresOn() {
-        return installedOn.plusDays(spec.family().serviceDays());
+        return spec.family().serviceEndsOn(installedOn);
     }
 
     /** True when the cartridge has been in the machine too long. */

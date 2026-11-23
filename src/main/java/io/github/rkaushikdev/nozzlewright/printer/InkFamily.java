@@ -1,6 +1,7 @@
 package io.github.rkaushikdev.nozzlewright.printer;
 
 import io.github.rkaushikdev.nozzlewright.util.Repr;
+import java.time.LocalDate;
 
 /**
  * What the ink is carried in, which decides its service life.
@@ -30,6 +31,11 @@ public enum InkFamily {
     /** Days from first install before the cartridge must come out. */
     public int serviceDays() {
         return serviceDays;
+    }
+
+    /** The last day a cartridge first fitted on {@code firstFitted} may stay in service. */
+    public LocalDate serviceEndsOn(LocalDate firstFitted) {
+        return firstFitted.plusDays(serviceDays);
     }
 
     /** How long the nozzles may sit uncapped before they need a purge. */

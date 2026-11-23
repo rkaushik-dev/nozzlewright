@@ -2,6 +2,8 @@ package io.github.rkaushikdev.nozzlewright.cli;
 
 import io.github.rkaushikdev.nozzlewright.NozzlewrightError;
 import io.github.rkaushikdev.nozzlewright.fleet.AlarmRules;
+import io.github.rkaushikdev.nozzlewright.fleet.CartridgeDue;
+import io.github.rkaushikdev.nozzlewright.fleet.CartridgeForecast;
 import io.github.rkaushikdev.nozzlewright.fleet.CostModel;
 import io.github.rkaushikdev.nozzlewright.fleet.Costing;
 import io.github.rkaushikdev.nozzlewright.fleet.Distribution;
@@ -506,15 +508,57 @@ final class FleetCommands extends Group {
         @Option(names = "--json", description = "Print JSON.")
         private boolean asJson;
 
+        @Option(
+                names = "--reorder",
+                defaultValue = "-1",
+                paramLabel = "DAYS",
+                description = "Instead, the cartridges due out in the next DAYS days and the parts to order.")
+        private int reorder;
+
         @Override
         public Integer call() {
             Context context = context();
+            if (reorder >= 0) {
+                return reorder(context);
+            }
             Optional<CostModel> model = context.site().costing();
             if (model.isEmpty()) {
                 throw Output.fail("no cartridge price, put a costing block in the site file");
             }
+            Spend result = spend(context, window(context), model.get());
+            if (result.labels().isEmpty() && result.unpriced().isEmpty()) {
+                out().println("nothing ran in that window");
+                return Main.OK;
+            }
+            Output.emit(out(), result.dearest().stream().map(LabelSpend::asMap).toList(), asJson);
+            out().println(result.summary());
+            return Main.OK;
+        }
 
-            Window window = window(context);
+        /** The cartridges coming out and the parts they take off the shelf. */
+        private Integer reorder(Context context) {
+            Instant now = Times.now();
+            List<CartridgeDue> due = reading(context, unit -> CartridgeForecast.due(unit, now, reorder));
+            Map<String, Long> parts = CartridgeForecast.toOrder(due);
+            if (asJson) {
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("days", reorder);
+                body.put("due", due.stream().map(CartridgeDue::asMap).toList());
+                body.put("order", parts);
+                Output.emit(out(), body, true);
+                return Main.OK;
+            }
+            if (due.isEmpty()) {
+                out().println("no cartridge is due out in the next " + reorder + " days");
+                return Main.OK;
+            }
+            Output.emit(out(), due.stream().map(CartridgeDue::asMap).toList(), false);
+            parts.forEach((part, count) -> out().println("order part=" + part + "  count=" + count));
+            return Main.OK;
+        }
+
+        /** What each message that ran in {@code window} cost, rendering each once for its dot count. */
+        private static Spend spend(Context context, Window window, CostModel model) {
             Map<String, Long> printed = reading(context, unit -> {
                 Map<String, Long> totals = new LinkedHashMap<>();
                 for (JobRun run : new JobRepo(unit).between(window.start(), window.end())) {
@@ -539,15 +583,7 @@ final class FleetCommands extends Group {
                         .build();
                 drops.put(label, Costing.dropsIn(Raster.render(template.resolve(fields), fonts)));
             }
-
-            Spend result = Costing.spendOver(printed, drops, model.get());
-            if (result.labels().isEmpty() && result.unpriced().isEmpty()) {
-                out().println("nothing ran in that window");
-                return Main.OK;
-            }
-            Output.emit(out(), result.dearest().stream().map(LabelSpend::asMap).toList(), asJson);
-            out().println(result.summary());
-            return Main.OK;
+            return Costing.spendOver(printed, drops, model);
         }
     }
 
