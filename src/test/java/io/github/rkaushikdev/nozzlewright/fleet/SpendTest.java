@@ -9,16 +9,20 @@ import io.github.rkaushikdev.nozzlewright.cli.Cli;
 import io.github.rkaushikdev.nozzlewright.cli.Context;
 import io.github.rkaushikdev.nozzlewright.labels.LabelStore;
 import io.github.rkaushikdev.nozzlewright.labels.LabelTemplate;
+import io.github.rkaushikdev.nozzlewright.printer.Alarms;
 import io.github.rkaushikdev.nozzlewright.printer.CartridgeSpec;
 import io.github.rkaushikdev.nozzlewright.printer.InkFamily;
 import io.github.rkaushikdev.nozzlewright.printer.JobOutcome;
 import io.github.rkaushikdev.nozzlewright.printer.JobResult;
+import io.github.rkaushikdev.nozzlewright.printer.MachineState;
+import io.github.rkaushikdev.nozzlewright.printer.PrinterStatus;
 import io.github.rkaushikdev.nozzlewright.siteconfig.SiteConfig;
 import io.github.rkaushikdev.nozzlewright.storage.Database;
 import io.github.rkaushikdev.nozzlewright.storage.JobRepo;
 import io.github.rkaushikdev.nozzlewright.storage.Printer;
 import io.github.rkaushikdev.nozzlewright.storage.PrinterRepo;
 import io.github.rkaushikdev.nozzlewright.storage.RunDetails;
+import io.github.rkaushikdev.nozzlewright.storage.SampleRepo;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -203,6 +207,28 @@ class SpendTest {
             Cli.Result result = window();
             assertThat(result.exitCode()).as(result.stderr()).isZero();
             assertThat(result.stdout()).contains("5000 codes");
+        }
+
+        @Test
+        void keepWetCountsTheIdleHeads() throws Exception {
+            seed();
+            try (Database database = Database.file(tmp.resolve(Context.DATABASE_NAME))) {
+                database.run(unit -> {
+                    Printer printer = new PrinterRepo(unit).require("line4");
+                    SampleRepo samples = new SampleRepo(unit);
+                    PrinterStatus ready = new PrinterStatus(MachineState.READY, Alarms.NONE, 0L);
+                    samples.record(printer, PollResult.answered("line4", 0.0, 0.05, ready), START);
+                    samples.record(
+                            printer,
+                            PollResult.answered("line4", 0.0, 0.05, ready),
+                            START.plus(Duration.ofMinutes(90)));
+                });
+            }
+            Cli.Result plain = window();
+            Cli.Result wet = window("--keep-wet");
+            assertThat(wet.exitCode()).as(wet.stderr()).isZero();
+            assertThat(wet.stdout()).contains("keeping 90 idle minutes wet");
+            assertThat(plain.stdout()).doesNotContain("idle minutes");
         }
 
         @Test

@@ -8,6 +8,7 @@ import io.github.rkaushikdev.nozzlewright.fleet.CostModel;
 import io.github.rkaushikdev.nozzlewright.fleet.Costing;
 import io.github.rkaushikdev.nozzlewright.fleet.Distribution;
 import io.github.rkaushikdev.nozzlewright.fleet.Export;
+import io.github.rkaushikdev.nozzlewright.fleet.KeepWet;
 import io.github.rkaushikdev.nozzlewright.fleet.LabelSpend;
 import io.github.rkaushikdev.nozzlewright.fleet.MachineSync;
 import io.github.rkaushikdev.nozzlewright.fleet.PrinterRecord;
@@ -509,6 +510,9 @@ final class FleetCommands extends Group {
         @Option(names = "--json", description = "Print JSON.")
         private boolean asJson;
 
+        @Option(names = "--keep-wet", description = "Count the ink spat keeping idle heads wet.")
+        private boolean keepWet;
+
         @Option(
                 names = "--reorder",
                 defaultValue = "-1",
@@ -526,7 +530,12 @@ final class FleetCommands extends Group {
             if (model.isEmpty()) {
                 throw Output.fail("no cartridge price, put a costing block in the site file");
             }
-            Spend result = spend(context, window(context), model.get());
+            Window window = window(context);
+            Spend result = spend(context, window, model.get());
+            if (keepWet) {
+                Duration idle = reading(context, unit -> KeepWet.idleOver(unit, window.start(), window.end()));
+                result = result.withKeepWet(idle, model.get());
+            }
             if (result.labels().isEmpty() && result.unpriced().isEmpty()) {
                 out().println("nothing ran in that window");
                 return Main.OK;
