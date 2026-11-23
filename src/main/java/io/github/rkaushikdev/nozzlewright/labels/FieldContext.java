@@ -1,6 +1,8 @@
 package io.github.rkaushikdev.nozzlewright.labels;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -70,6 +72,26 @@ public final class FieldContext {
     /** The shift table, in the order it is searched. */
     public List<ShiftWindow> shifts() {
         return shifts;
+    }
+
+    /** The first shift in the table that covers the clock, if any does. */
+    public Optional<ShiftWindow> shift() {
+        LocalTime moment = now.toLocalTime();
+        return shifts.stream().filter(window -> window.covers(moment)).findFirst();
+    }
+
+    /**
+     * The day the running shift started.
+     *
+     * <p>That is the calendar date except in the part of a night shift that falls after midnight,
+     * when it is the day before. With no shift running it is the calendar date.
+     */
+    public LocalDate productionDay() {
+        LocalDate today = now.toLocalDate();
+        boolean pastMidnight = shift().filter(ShiftWindow::wrapsMidnight)
+                .filter(window -> now.toLocalTime().isBefore(window.end()))
+                .isPresent();
+        return pastMidnight ? today.minusDays(1) : today;
     }
 
     /** The site the label is printed at, empty when nobody said. */

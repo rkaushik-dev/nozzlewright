@@ -21,7 +21,7 @@ import java.util.Set;
  * <pre>
  *     LABEL carton-outer 104
  *     FIELD brand TEXT HALVEX
- *     FIELD made DATE DD/MM/YY
+ *     FIELD made DATE DD/MM/YY day=shift
  *     FIELD bb EXPIRY DD/MM/YY months=6
  *     FIELD bbe EXPIRY MM/YYYY months=18 round=month
  *     FIELD serial COUNTER start=1 step=1 width=6 pad=0
@@ -168,6 +168,15 @@ final class LabelParser {
         return !FALSE_WORDS.contains(options.getOrDefault(key, fallback).toLowerCase(Locale.ROOT));
     }
 
+    /** Which day a date counts from, {@code clock} unless the line says {@code day=shift}. */
+    private static Dating dating(Map<String, String> options, int lineNumber) {
+        try {
+            return Dating.parse(options.getOrDefault("day", "clock"));
+        } catch (LabelError error) {
+            throw new LabelError(error.getMessage(), lineNumber);
+        }
+    }
+
     /** A counter pad character: one character, or {@code SP} for a space. */
     private static String pad(String raw, int lineNumber) {
         if (raw.toUpperCase(Locale.ROOT).equals(CounterField.PAD_SPACE)) {
@@ -212,7 +221,8 @@ final class LabelParser {
                 if (rest.isEmpty()) {
                     throw new LabelError("date field " + name + " has no pattern", lineNumber);
                 }
-                return new DateField(name, rest.get(0));
+                Map<String, String> options = options(rest.subList(1, rest.size()), lineNumber);
+                return new DateField(name, rest.get(0), dating(options, lineNumber));
             }
             case "EXPIRY" -> {
                 if (rest.isEmpty()) {
@@ -227,7 +237,8 @@ final class LabelParser {
                 } catch (LabelError error) {
                     throw new LabelError(error.getMessage(), lineNumber);
                 }
-                return new ExpiryField(name, rest.get(0), new ShelfLife(months, days, rounding));
+                return new ExpiryField(
+                        name, rest.get(0), new ShelfLife(months, days, rounding), dating(options, lineNumber));
             }
             case "COUNTER" -> {
                 Map<String, String> options = options(rest, lineNumber);

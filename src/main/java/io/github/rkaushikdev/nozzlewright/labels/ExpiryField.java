@@ -12,12 +12,14 @@ import java.util.Map;
  * A date offset forward from today, for a best before or a use by.
  *
  * <p>The offset is a {@link ShelfLife}: months, then days, then an optional rounding to the end of the
- * month. The time of day is kept.
+ * month. It counts from the calendar date, or with {@link Dating#SHIFT} from the day the running
+ * shift started. The time of day is kept.
  */
 public final class ExpiryField extends Field {
 
     private final String pattern;
     private final ShelfLife shelfLife;
+    private final Dating dating;
 
     /** A field rendering {@code pattern} at today plus {@code months} and {@code days}. */
     public ExpiryField(String name, String pattern, int days, int months) {
@@ -26,9 +28,20 @@ public final class ExpiryField extends Field {
 
     /** A field rendering {@code pattern} at today moved on by {@code shelfLife}. */
     public ExpiryField(String name, String pattern, ShelfLife shelfLife) {
+        this(name, pattern, shelfLife, Dating.CLOCK);
+    }
+
+    /** A field rendering {@code pattern} at the day {@code dating} picks, moved on by {@code shelfLife}. */
+    public ExpiryField(String name, String pattern, ShelfLife shelfLife, Dating dating) {
         super(name);
         this.pattern = pattern;
         this.shelfLife = shelfLife;
+        this.dating = dating;
+    }
+
+    /** Which day the shelf life counts from. */
+    public Dating dating() {
+        return dating;
     }
 
     /** The date pattern. */
@@ -64,7 +77,7 @@ public final class ExpiryField extends Field {
 
     @Override
     public String render(FieldContext context) {
-        LocalDate expires = shelfLife.apply(context.now().toLocalDate());
+        LocalDate expires = shelfLife.apply(dating.dayOf(context));
         return DateCode.format(pattern, expires.atTime(context.now().toLocalTime()));
     }
 
@@ -81,6 +94,9 @@ public final class ExpiryField extends Field {
         if (shelfLife.rounding() != ShelfLife.Rounding.NONE) {
             parts.add("round=" + shelfLife.rounding().word());
         }
+        if (dating != Dating.CLOCK) {
+            parts.add("day=" + dating.word());
+        }
         return String.join(" ", parts);
     }
 
@@ -91,6 +107,7 @@ public final class ExpiryField extends Field {
         attributes.put("days", shelfLife.days());
         attributes.put("months", shelfLife.months());
         attributes.put("round", shelfLife.rounding().word());
+        attributes.put("day", dating.word());
         return Collections.unmodifiableMap(attributes);
     }
 }

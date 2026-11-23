@@ -1,6 +1,5 @@
 package io.github.rkaushikdev.nozzlewright.labels;
 
-import java.time.LocalTime;
 import java.util.Map;
 
 /**
@@ -31,13 +30,7 @@ public final class ShiftField extends Field {
 
     @Override
     public String render(FieldContext context) {
-        LocalTime moment = context.now().toLocalTime();
-        for (ShiftWindow window : context.shifts()) {
-            if (window.covers(moment)) {
-                return window.code();
-            }
-        }
-        return fallback;
+        return context.shift().map(ShiftWindow::code).orElse(fallback);
     }
 
     @Override
