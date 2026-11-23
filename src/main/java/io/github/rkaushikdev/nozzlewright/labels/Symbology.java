@@ -15,6 +15,7 @@ import java.util.Optional;
 public enum Symbology {
     CODE128("CODE128", 0.165, 0.0),
     CODE39("CODE39", 0.165, 0.0),
+    CODE39_FULL("CODE39-FULL", 0.165, 0.0),
     GS1_128("GS1-128", 0.495, 31.75),
     ITF14("ITF-14", 0.495, 31.75);
 
@@ -31,7 +32,7 @@ public enum Symbology {
     /**
      * The narrowest bar this symbology should be printed with, in millimetres.
      *
-     * <p>For plain Code 128 and Code 39 it is the low end of what a hand scanner reads, which is two
+     * <p>For plain Code 128 and both kinds of Code 39 it is the low end of what a hand scanner reads, which is two
      * dots at 300 dpi. The two GS1 logistics symbols are read by fixed scanners over a conveyor in a
      * distribution centre, and the GS1 tables put their floor at 0.495 mm.
      */
@@ -63,7 +64,7 @@ public enum Symbology {
     public int quietZoneModules() {
         return switch (this) {
             case CODE128, GS1_128 -> Code128.QUIET_ZONE_MODULES;
-            case CODE39 -> Code39.QUIET_ZONE_MODULES;
+            case CODE39, CODE39_FULL -> Code39.QUIET_ZONE_MODULES;
             case ITF14 -> Itf14.QUIET_ZONE_MODULES;
         };
     }
@@ -77,6 +78,7 @@ public enum Symbology {
         switch (this) {
             case CODE128 -> Code128.encode(data);
             case CODE39 -> Code39.encode(data);
+            case CODE39_FULL -> Code39.encodeFullAscii(data, false);
             case GS1_128 -> Gs1.parse(data);
             case ITF14 -> Itf14.check(data);
         }

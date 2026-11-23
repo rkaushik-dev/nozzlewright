@@ -272,7 +272,7 @@ public final class Lint {
         }
         List<Finding> findings = new ArrayList<>(checkData(element, kind.get(), template));
         switch (kind.get()) {
-            case CODE39 -> findings.addAll(checkCode39(element));
+            case CODE39, CODE39_FULL -> findings.addAll(checkCode39(element));
             case ITF14 -> findings.addAll(checkItf14(element));
             case CODE128, GS1_128 -> {
                 // Code 128 has no ratio and no check option, so its data is all there is to check.

@@ -155,6 +155,19 @@ class LintTest {
     }
 
     @Test
+    void aFullAsciiCode39LabelKeepsItsLowerCase() {
+        String source =
+                "LABEL c 104\nFIELD t TEXT lot-4a\nBARCODE code 0,0 t symbology=code39-full check=1 height=40 module=3"
+                        + " human=0\nEND\n";
+        LintReport report = check(source);
+        assertThat(report.of(Grade.STOP)).isEmpty();
+        assertThat(anyMessage(report.findings(), "unprotected")).isFalse();
+        LintReport accented = check(source.replace("lot-4a", "caf\u00e9"));
+        assertThat(accented.of(Grade.STOP))
+                .anySatisfy(item -> assertThat(item.where()).isEqualTo("code"));
+    }
+
+    @Test
     void gradesThatBlock() {
         assertThat(Grade.STOP.blocks()).isTrue();
         assertThat(Grade.WARN.blocks()).isFalse();

@@ -7,7 +7,10 @@ import io.github.rkaushikdev.nozzlewright.LabelError;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class Code39Test {
 
@@ -250,5 +253,86 @@ class Code39Test {
         }
         widths.add(run);
         return widths;
+    }
+
+    @ParameterizedTest
+    @CsvSource(
+            delimiter = '|',
+            value = {
+                "a|+A",
+                "z|+Z",
+                "!|/A",
+                ",|/L",
+                "/|/O",
+                ":|/Z",
+                ";|%F",
+                "?|%J",
+                "@|%V",
+                "[|%K",
+                "_|%O",
+                "`|%W",
+                "{|%P",
+                "~|%S",
+                "AZ09|AZ09",
+                "-. |-. "
+            })
+    void fullAsciiWritesThePairsTheStandardGives(String data, String pairs) {
+        assertThat(Code39.fullAscii(data)).isEqualTo(pairs);
+    }
+
+    @Test
+    void fullAsciiControlCharacters() {
+        assertThat(Code39.fullAscii("\u0000")).isEqualTo("%U");
+        assertThat(Code39.fullAscii("\r\n")).isEqualTo("$M$J");
+        assertThat(Code39.fullAscii("\u001b\u001f")).isEqualTo("%A%E");
+        assertThat(Code39.fullAscii("\u007f")).isEqualTo("%T");
+    }
+
+    @Test
+    void everyAsciiCharacterHasItsOwnPairInsideTheAlphabet() {
+        Set<String> seen = new HashSet<>();
+        for (int point = 0; point < 128; point++) {
+            String pair = Code39.fullAscii(Character.toString(point));
+            assertThat(pair).as("code point %d", point).hasSizeBetween(1, 2);
+            assertThat(pair.chars()).allMatch(ch -> Code39.ALPHABET.indexOf(ch) >= 0);
+            assertThat(seen.add(pair))
+                    .as("pair %s for code point %d", pair, point)
+                    .isTrue();
+        }
+    }
+
+    @Test
+    void fullAsciiKeepsLowerCaseThatPlainCode39Folds() {
+        assertThat(Code39.encode("lot")).isEqualTo("*LOT*");
+        assertThat(Code39.encodeFullAscii("lot", false)).isEqualTo("*+L+O+T*");
+    }
+
+    @Test
+    void fullAsciiChecksTheCharactersItCarries() {
+        String symbol = Code39.encodeFullAscii("a", true);
+        assertThat(symbol).isEqualTo("*+A" + Code39.checkCharacter("+A") + "*");
+    }
+
+    @Test
+    void fullAsciiRefusesWhatSevenBitsCannotHold() {
+        assertThatThrownBy(() -> Code39.fullAscii("caf\u00e9"))
+                .isInstanceOf(LabelError.class)
+                .hasMessageContaining("full ascii cannot carry");
+        assertThatThrownBy(() -> Code39.encodeFullAscii("", false))
+                .isInstanceOf(LabelError.class)
+                .hasMessageContaining("nothing to encode");
+    }
+
+    @Test
+    void aFullAsciiSymbolIsWiderThanItsData() {
+        assertThat(Code39.modulesForFullAscii("ab", false, 2)).hasSize(Code39.widthInModules("+A+B", false, 2, true));
+    }
+
+    @Test
+    void theCompactTableMatchesTheAlphabet() {
+        assertThat(Code39.PATTERNS.keySet()).hasSize(Code39.ALPHABET.length() + 1);
+        assertThat(Code39.PATTERNS.get('0')).isEqualTo(0b000110100);
+        assertThat(Code39.PATTERNS.get('%')).isEqualTo(0b000101010);
+        assertThat(Code39.PATTERNS.get(Code39.DELIMITER)).isEqualTo(0b010010100);
     }
 }

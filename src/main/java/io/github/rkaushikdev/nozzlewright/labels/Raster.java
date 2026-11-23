@@ -105,6 +105,7 @@ public final class Raster {
         return switch (kind) {
             case CODE128 -> Code128.modulesFor(text);
             case CODE39 -> Code39.modulesFor(text, element.checkDigit(), element.wideRatio(), true);
+            case CODE39_FULL -> Code39.modulesForFullAscii(text, element.checkDigit(), element.wideRatio());
             case GS1_128 -> Code128.modulesForGs1(text);
             case ITF14 -> Itf14.modulesFor(text, element.wideRatio());
         };

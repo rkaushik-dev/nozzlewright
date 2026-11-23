@@ -46,6 +46,19 @@ public final class Code39 {
     public static final char DELIMITER = '*';
 
     /**
+     * Wide elements per character, nine bits each, in {@link #ALPHABET} order and then the delimiter.
+     * This is the table in the standard, transcribed once.
+     */
+    private static final String WIDE_ELEMENTS = String.join(
+            " ",
+            "000110100 100100001 001100001 101100000 000110001 100110000 001110000 000100101",
+            "100100100 001100100 100001001 001001001 101001000 000011001 100011000 001011000",
+            "000001101 100001100 001001100 000011100 100000011 001000011 101000010 000010011",
+            "100010010 001010010 000000111 100000110 001000110 000010110 110000001 011000001",
+            "111000000 010010001 110010000 011010000 010000101 110000100 011000100 010101000",
+            "010100010 010001010 000101010 010010100");
+
+    /**
      * Which of the nine elements of each character are wide. One bit per element, most significant
      * first, bars and spaces alternating and starting on a bar.
      */
@@ -107,12 +120,82 @@ public final class Code39 {
      * @throws LabelError when there is nothing to encode or the data cannot be carried
      */
     public static String encode(String data, boolean check) {
-        String folded = normalise(data);
-        if (folded.isEmpty()) {
+        return delimit(normalise(data), check);
+    }
+
+    /**
+     * The characters of a Full ASCII symbol, delimiters included.
+     *
+     * <p>Full ASCII is ordinary Code 39 with every character outside the alphabet written as a pair:
+     * {@code +A} for a lower case a, {@code $M} for a carriage return, {@code /A} for an exclamation
+     * mark. A reader set to Full ASCII folds the pairs back, one that is not prints them as they are,
+     * which is why it is a symbology of its own on the label rather than a quiet extension. The check
+     * character is worked out over the pairs, as the symbol carries them.
+     *
+     * @throws LabelError when there is nothing to encode or a character is outside seven bit ASCII
+     */
+    public static String encodeFullAscii(String data, boolean check) {
+        return delimit(fullAscii(data), check);
+    }
+
+    /**
+     * Write {@code data} as the Code 39 pairs Full ASCII uses.
+     *
+     * @throws LabelError when a character is outside seven bit ASCII
+     */
+    public static String fullAscii(String data) {
+        StringBuilder out = new StringBuilder();
+        for (int point : data.codePoints().toArray()) {
+            out.append(fullAsciiPair(point));
+        }
+        return out.toString();
+    }
+
+    /** The one or two characters one code point is written as in Full ASCII. */
+    private static String fullAsciiPair(int point) {
+        if (point < 0 || point > 127) {
+            throw new LabelError("code 39 full ascii cannot carry " + Repr.of(Character.toString(point)));
+        }
+        char ch = (char) point;
+        if (point == 0) {
+            return "%U";
+        }
+        if (point <= 26) {
+            return "$" + (char) ('A' + point - 1);
+        }
+        if (point <= 31) {
+            return "%" + (char) ('A' + point - 27);
+        }
+        if (ch == ' ' || ch == '-' || ch == '.' || Character.isDigit(ch) || (ch >= 'A' && ch <= 'Z')) {
+            return String.valueOf(ch);
+        }
+        if (ch >= '!' && ch <= ',') {
+            return "/" + (char) ('A' + point - '!');
+        }
+        if (ch == '/' || ch == ':') {
+            return ch == '/' ? "/O" : "/Z";
+        }
+        if (ch >= ';' && ch <= '?') {
+            return "%" + (char) ('F' + point - ';');
+        }
+        if (ch == '@' || ch == '`') {
+            return ch == '@' ? "%V" : "%W";
+        }
+        if (ch >= '[' && ch <= '_') {
+            return "%" + (char) ('K' + point - '[');
+        }
+        if (ch >= 'a' && ch <= 'z') {
+            return "+" + Character.toUpperCase(ch);
+        }
+        return "%" + (char) ('P' + point - '{');
+    }
+
+    /** Wrap characters already in the alphabet in delimiters, with the check character if asked. */
+    private static String delimit(String body, boolean check) {
+        if (body.isEmpty()) {
             throw new LabelError("code 39 has nothing to encode");
         }
-        String body = check ? folded + checkCharacter(folded) : folded;
-        return DELIMITER + body + DELIMITER;
+        return DELIMITER + (check ? body + checkCharacter(body) : body) + DELIMITER;
     }
 
     /** The symbol as modules at a two to one ratio, no check character, quiet zones on. */
@@ -130,6 +213,16 @@ public final class Code39 {
      * @throws LabelError when the ratio is outside two to three or the data cannot be encoded
      */
     public static List<Boolean> modulesFor(String data, boolean check, int ratio, boolean quietZone) {
+        return modulesOf(encode(data, check), ratio, quietZone);
+    }
+
+    /** A Full ASCII symbol as modules, quiet zones on. */
+    public static List<Boolean> modulesForFullAscii(String data, boolean check, int ratio) {
+        return modulesOf(encodeFullAscii(data, check), ratio, true);
+    }
+
+    /** A finished symbol, delimiters included, as modules. */
+    private static List<Boolean> modulesOf(String symbol, int ratio, boolean quietZone) {
         if (ratio < MIN_RATIO || ratio > MAX_RATIO) {
             throw new LabelError(
                     "a code 39 wide to narrow ratio of " + ratio + " is outside " + MIN_RATIO + " to " + MAX_RATIO);
@@ -138,7 +231,6 @@ public final class Code39 {
         if (quietZone) {
             modules.addAll(Collections.nCopies(QUIET_ZONE_MODULES, false));
         }
-        String symbol = encode(data, check);
         for (int index = 0; index < symbol.length(); index++) {
             if (index > 0) {
                 modules.add(false);
@@ -185,51 +277,12 @@ public final class Code39 {
     }
 
     private static Map<Character, Integer> patterns() {
+        String characters = ALPHABET + DELIMITER;
+        String[] wide = WIDE_ELEMENTS.split(" ");
         Map<Character, Integer> table = new LinkedHashMap<>();
-        table.put('0', 0b000110100);
-        table.put('1', 0b100100001);
-        table.put('2', 0b001100001);
-        table.put('3', 0b101100000);
-        table.put('4', 0b000110001);
-        table.put('5', 0b100110000);
-        table.put('6', 0b001110000);
-        table.put('7', 0b000100101);
-        table.put('8', 0b100100100);
-        table.put('9', 0b001100100);
-        table.put('A', 0b100001001);
-        table.put('B', 0b001001001);
-        table.put('C', 0b101001000);
-        table.put('D', 0b000011001);
-        table.put('E', 0b100011000);
-        table.put('F', 0b001011000);
-        table.put('G', 0b000001101);
-        table.put('H', 0b100001100);
-        table.put('I', 0b001001100);
-        table.put('J', 0b000011100);
-        table.put('K', 0b100000011);
-        table.put('L', 0b001000011);
-        table.put('M', 0b101000010);
-        table.put('N', 0b000010011);
-        table.put('O', 0b100010010);
-        table.put('P', 0b001010010);
-        table.put('Q', 0b000000111);
-        table.put('R', 0b100000110);
-        table.put('S', 0b001000110);
-        table.put('T', 0b000010110);
-        table.put('U', 0b110000001);
-        table.put('V', 0b011000001);
-        table.put('W', 0b111000000);
-        table.put('X', 0b010010001);
-        table.put('Y', 0b110010000);
-        table.put('Z', 0b011010000);
-        table.put('-', 0b010000101);
-        table.put('.', 0b110000100);
-        table.put(' ', 0b011000100);
-        table.put('$', 0b010101000);
-        table.put('/', 0b010100010);
-        table.put('+', 0b010001010);
-        table.put('%', 0b000101010);
-        table.put('*', 0b010010100);
+        for (int index = 0; index < characters.length(); index++) {
+            table.put(characters.charAt(index), Integer.parseInt(wide[index], 2));
+        }
         return Collections.unmodifiableMap(table);
     }
 }
