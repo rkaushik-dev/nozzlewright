@@ -7,6 +7,7 @@ import io.github.rkaushikdev.nozzlewright.LabelError;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class Gs1Test {
@@ -94,5 +95,50 @@ class Gs1Test {
         assertThat(Symbology.parse("EAN13")).isEmpty();
         assertThat(Symbology.GS1_128.carriesGs1()).isTrue();
         assertThat(Symbology.CODE128.carriesGs1()).isFalse();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"629104150021,3", "37610425002123456,9", "0950110153000,3", "1234567,0"})
+    void checkDigitsFollowTheModuloTenRule(String digits, char expected) {
+        assertThat(Gs1.checkDigit(digits)).isEqualTo(expected);
+    }
+
+    @Test
+    void aCheckDigitNeedsDigits() {
+        assertThatThrownBy(() -> Gs1.checkDigit("12A")).isInstanceOf(LabelError.class);
+        assertThatThrownBy(() -> Gs1.checkDigit("")).isInstanceOf(LabelError.class);
+    }
+
+    @Test
+    void aGtinWithTheWrongCheckDigitIsRefused() {
+        assertThatThrownBy(() -> Gs1.parse("(01)09501101530004"))
+                .isInstanceOf(LabelError.class)
+                .hasMessageContaining("has check digit 4, it should be 3");
+    }
+
+    @Test
+    void anSsccIsCheckedToo() {
+        assertThat(Gs1.parse("(00)376104250021234569")).hasSize(1);
+        assertThatThrownBy(() -> Gs1.parse("(00)376104250021234560"))
+                .isInstanceOf(LabelError.class)
+                .hasMessageContaining("it should be 9");
+    }
+
+    @Test
+    void aDayOfNoughtMeansTheEndOfTheMonth() {
+        assertThat(Gs1.parse("(15)261200")).containsExactly(new Gs1.Segment("15", "261200"));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"261331,no month 13", "260231,no day 31 in month 2", "250229,no day 29", "260431,no day 31"})
+    void aDateThatDoesNotExistIsRefused(String date, String message) {
+        assertThatThrownBy(() -> Gs1.parse("(17)" + date))
+                .isInstanceOf(LabelError.class)
+                .hasMessageContaining(message);
+    }
+
+    @Test
+    void aLeapDayIsAllowedInALeapYear() {
+        assertThat(Gs1.parse("(11)280229")).hasSize(1);
     }
 }

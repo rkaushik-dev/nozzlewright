@@ -2,6 +2,7 @@ package io.github.rkaushikdev.nozzlewright.labels;
 
 import io.github.rkaushikdev.nozzlewright.LabelError;
 import io.github.rkaushikdev.nozzlewright.util.Repr;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -26,23 +27,60 @@ public final class Gs1 {
     /** The ASCII group separator, which stands for a function one character inside encoded data. */
     public static final char GROUP_SEPARATOR = '\u001d';
 
+    /** What kind of data an identifier carries. */
+    private enum Content {
+        /** Printable characters. */
+        TEXT,
+        /** Digits. */
+        DIGITS,
+        /** Digits ending in a modulo ten check digit: a GTIN or an SSCC. */
+        CHECKED,
+        /** A date as YYMMDD, where a day of 00 means the end of the month. */
+        DATE
+    }
+
     /** What follows one application identifier. */
-    private record Rule(int length, boolean fixed, boolean numeric) {}
+    private record Rule(int length, boolean fixed, Content content) {
+
+        /** Check {@code data} against this rule, naming {@code ai} in the error. */
+        void check(String ai, String data) {
+            if (fixed ? data.length() != length : data.isEmpty() || data.length() > length) {
+                String wanted = fixed ? "exactly " + length : "one to " + length;
+                throw new LabelError("(" + ai + ") carries " + wanted + " characters, got " + data.length());
+            }
+            if (!data.chars().allMatch(ch -> ch > 32 && ch < 127 && ch != '(' && ch != ')')) {
+                throw new LabelError("(" + ai + ") cannot carry " + Repr.of(data));
+            }
+            if (content != Content.TEXT && !data.chars().allMatch(ch -> ch >= '0' && ch <= '9')) {
+                throw new LabelError("(" + ai + ") carries digits only, got " + Repr.of(data));
+            }
+            if (content == Content.CHECKED) {
+                char wanted = checkDigit(data.substring(0, data.length() - 1));
+                if (data.charAt(data.length() - 1) != wanted) {
+                    throw new LabelError("(" + ai + ") " + data + " has check digit " + data.charAt(data.length() - 1)
+                            + ", it should be " + wanted);
+                }
+            }
+            if (content == Content.DATE) {
+                checkDate(ai, data);
+            }
+        }
+    }
 
     private static final Map<String, Rule> RULES = Map.ofEntries(
-            Map.entry("00", new Rule(18, true, true)),
-            Map.entry("01", new Rule(14, true, true)),
-            Map.entry("02", new Rule(14, true, true)),
-            Map.entry("10", new Rule(20, false, false)),
-            Map.entry("11", new Rule(6, true, true)),
-            Map.entry("13", new Rule(6, true, true)),
-            Map.entry("15", new Rule(6, true, true)),
-            Map.entry("17", new Rule(6, true, true)),
-            Map.entry("20", new Rule(2, true, true)),
-            Map.entry("21", new Rule(20, false, false)),
-            Map.entry("30", new Rule(8, false, true)),
-            Map.entry("37", new Rule(8, false, true)),
-            Map.entry("400", new Rule(30, false, false)));
+            Map.entry("00", new Rule(18, true, Content.CHECKED)),
+            Map.entry("01", new Rule(14, true, Content.CHECKED)),
+            Map.entry("02", new Rule(14, true, Content.CHECKED)),
+            Map.entry("10", new Rule(20, false, Content.TEXT)),
+            Map.entry("11", new Rule(6, true, Content.DATE)),
+            Map.entry("13", new Rule(6, true, Content.DATE)),
+            Map.entry("15", new Rule(6, true, Content.DATE)),
+            Map.entry("17", new Rule(6, true, Content.DATE)),
+            Map.entry("20", new Rule(2, true, Content.DIGITS)),
+            Map.entry("21", new Rule(20, false, Content.TEXT)),
+            Map.entry("30", new Rule(8, false, Content.DIGITS)),
+            Map.entry("37", new Rule(8, false, Content.DIGITS)),
+            Map.entry("400", new Rule(30, false, Content.TEXT)));
 
     /**
      * One application identifier and its data.
@@ -70,7 +108,8 @@ public final class Gs1 {
      * Read bracketed element strings, such as {@code (01)09501101530003(10)A12}.
      *
      * @throws LabelError when the text is not bracketed element strings, an identifier is not one this
-     *     build knows, or a field has the wrong length or characters
+     *     build knows, or a field has the wrong length or characters, a wrong check digit or a date
+     *     that does not exist
      */
     public static List<Segment> parse(String text) {
         if (text.isEmpty() || text.charAt(0) != '(') {
@@ -98,18 +137,50 @@ public final class Gs1 {
         if (rule == null) {
             throw new LabelError("application identifier (" + ai + ") is not one we print");
         }
-        if (rule.fixed() ? data.length() != rule.length() : data.isEmpty() || data.length() > rule.length()) {
-            String wanted = rule.fixed() ? "exactly " + rule.length() : "one to " + rule.length();
-            throw new LabelError("(" + ai + ") carries " + wanted + " characters, got " + data.length());
-        }
-        boolean digits = data.chars().allMatch(ch -> ch >= '0' && ch <= '9');
-        if (rule.numeric() && !digits) {
-            throw new LabelError("(" + ai + ") carries digits only, got " + Repr.of(data));
-        }
-        if (!data.chars().allMatch(ch -> ch > 32 && ch < 127 && ch != '(' && ch != ')')) {
-            throw new LabelError("(" + ai + ") cannot carry " + Repr.of(data));
-        }
+        rule.check(ai, data);
         return new Segment(ai, data);
+    }
+
+    /**
+     * The GS1 modulo ten check digit for {@code digits}.
+     *
+     * <p>Weights alternate three and one from the right, so the digit next to the check digit always
+     * weighs three, whatever the length. That is why one routine serves a GTIN-8, a GTIN-14 and an
+     * eighteen digit SSCC alike.
+     *
+     * @throws LabelError when the text is empty or holds anything but digits
+     */
+    public static char checkDigit(String digits) {
+        if (digits.isEmpty() || !digits.chars().allMatch(ch -> ch >= '0' && ch <= '9')) {
+            throw new LabelError("a check digit is worked out from digits, got " + Repr.of(digits));
+        }
+        int total = 0;
+        for (int index = 0; index < digits.length(); index++) {
+            int digit = digits.charAt(digits.length() - 1 - index) - '0';
+            total += index % 2 == 0 ? digit * 3 : digit;
+        }
+        return (char) ('0' + (10 - total % 10) % 10);
+    }
+
+    /**
+     * A YYMMDD date has a real month, and a day that month has or 00.
+     *
+     * <p>The year is not checked against the month length beyond February: GS1 leaves the century to
+     * the reader, so a 29th of February is allowed in any year divisible by four.
+     */
+    private static void checkDate(String ai, String data) {
+        int year = Integer.parseInt(data.substring(0, 2));
+        int month = Integer.parseInt(data.substring(2, 4));
+        int day = Integer.parseInt(data.substring(4, 6));
+        if (month < 1 || month > 12) {
+            throw new LabelError("(" + ai + ") " + data + " has no month " + month);
+        }
+        int longest = month == 2
+                ? (year % 4 == 0 ? 29 : 28)
+                : YearMonth.of(2001, month).lengthOfMonth();
+        if (day > longest) {
+            throw new LabelError("(" + ai + ") " + data + " has no day " + day + " in month " + month);
+        }
     }
 
     /**

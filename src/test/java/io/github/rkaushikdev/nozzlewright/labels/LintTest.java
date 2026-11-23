@@ -146,6 +146,13 @@ class LintTest {
     }
 
     @Test
+    void aGs1CaseCodeWithAMistypedGtinSaysWhatTheCheckDigitShouldBe() {
+        LintReport report = check(CASE_CODE.replace("09501101530003", "09501101530008"));
+        assertThat(report.of(Grade.STOP))
+                .anySatisfy(item -> assertThat(item.message()).contains("it should be 3"));
+    }
+
+    @Test
     void aGs1SymbolFedFromACounterIsLeftToTheRender() {
         LintReport report = check(CASE_CODE.replace("FIELD gs1 TEXT (01)09501101530003(10)A12", "FIELD gs1 COUNTER"));
         assertThat(report.of(Grade.STOP)).noneMatch(item -> item.where().equals("code"));
