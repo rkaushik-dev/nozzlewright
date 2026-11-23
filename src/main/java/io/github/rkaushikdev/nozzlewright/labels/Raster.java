@@ -106,7 +106,24 @@ public final class Raster {
             case CODE128 -> Code128.modulesFor(text);
             case CODE39 -> Code39.modulesFor(text, element.checkDigit(), element.wideRatio(), true);
             case GS1_128 -> Code128.modulesForGs1(text);
+            case ITF14 -> Itf14.modulesFor(text, element.wideRatio());
         };
+    }
+
+    /**
+     * The bars along the top and bottom of an ITF-14 symbol, across its quiet zones as well, so a
+     * scan line that leaves the symbol at an angle crosses a bar and fails rather than reading short.
+     */
+    private static void drawBearers(DotMatrix matrix, BarcodeElement element, int width) {
+        int thickness = Itf14.BEARER_MODULES * element.moduleDots();
+        if (element.heightDots() <= thickness * 4) {
+            throw new LabelError("barcode " + element.name() + " is " + element.heightDots()
+                    + " dots high, too short for ITF-14 bearer bars " + thickness + " dots thick");
+        }
+        int x = element.placement().x();
+        int y = element.placement().y();
+        matrix.fill(x, y, width, thickness);
+        matrix.fill(x, y + element.heightDots() - thickness, width, thickness);
     }
 
     private static void renderBarcode(
@@ -132,6 +149,9 @@ public final class Raster {
             columns.addAll(Collections.nCopies(element.moduleDots(), module ? band : BigInteger.ZERO));
         }
         matrix.blit(columns, element.placement().x(), 0);
+        if (element.printedAs().filter(kind -> kind == Symbology.ITF14).isPresent()) {
+            drawBearers(matrix, element, columns.size());
+        }
 
         if (captionFont != null) {
             int captionY = y + element.heightDots() + HUMAN_READABLE_GAP;

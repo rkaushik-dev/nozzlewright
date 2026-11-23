@@ -55,11 +55,7 @@ public final class Gs1 {
                 throw new LabelError("(" + ai + ") carries digits only, got " + Repr.of(data));
             }
             if (content == Content.CHECKED) {
-                char wanted = checkDigit(data.substring(0, data.length() - 1));
-                if (data.charAt(data.length() - 1) != wanted) {
-                    throw new LabelError("(" + ai + ") " + data + " has check digit " + data.charAt(data.length() - 1)
-                            + ", it should be " + wanted);
-                }
+                requireCheckDigit("(" + ai + ")", data);
             }
             if (content == Content.DATE) {
                 checkDate(ai, data);
@@ -160,6 +156,20 @@ public final class Gs1 {
             total += index % 2 == 0 ? digit * 3 : digit;
         }
         return (char) ('0' + (10 - total % 10) % 10);
+    }
+
+    /**
+     * Refuse digits whose last one is not their check digit.
+     *
+     * @param what how the error names the data, such as {@code (01)} or {@code ITF-14}
+     * @throws LabelError saying which digit it should have been
+     */
+    public static void requireCheckDigit(String what, String digits) {
+        char given = digits.charAt(digits.length() - 1);
+        char wanted = checkDigit(digits.substring(0, digits.length() - 1));
+        if (given != wanted) {
+            throw new LabelError(what + " " + digits + " has check digit " + given + ", it should be " + wanted);
+        }
     }
 
     /**

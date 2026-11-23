@@ -22,7 +22,8 @@ import java.util.Optional;
  * @param humanReadable whether the text is printed under the bars
  * @param textFont the font the human readable line is drawn in
  * @param checkDigit Code 39 only: whether the modulo forty three check character is added
- * @param wideRatio Code 39 only: how many narrow modules a wide element is
+ * @param wideRatio Code 39 and ITF-14, the two width symbologies: how many narrow modules a wide
+ *     element is
  */
 public record BarcodeElement(
         String name,
@@ -194,7 +195,7 @@ public record BarcodeElement(
             return this;
         }
 
-        /** How many narrow modules a Code 39 wide element is. */
+        /** How many narrow modules a wide element is, for Code 39 and ITF-14. */
         public Builder wideRatio(int value) {
             this.wideRatio = value;
             return this;

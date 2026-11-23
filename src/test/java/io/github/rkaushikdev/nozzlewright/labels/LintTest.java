@@ -152,6 +152,41 @@ class LintTest {
                 .anySatisfy(item -> assertThat(item.message()).contains("it should be 3"));
     }
 
+    static final String SHIPPER = "LABEL shipper 104\n"
+            + "FIELD gtin TEXT 09501101530003\n"
+            + "BARCODE code 0,0 gtin symbology=ITF-14 height=80 module=3 human=0 ratio=3\n"
+            + "END\n";
+
+    @Test
+    void aSoundShipperCodePasses() {
+        LintReport report = check(SHIPPER);
+        assertThat(report.of(Grade.STOP)).isEmpty();
+        assertThat(report.of(Grade.WARN)).noneMatch(item -> item.message().contains("ITF-14"));
+    }
+
+    @Test
+    void aTwoToOneShipperCodeIsAWarning() {
+        LintReport report = check(SHIPPER.replace(" ratio=3", ""));
+        assertThat(report.ok()).isTrue();
+        assertThat(anyMessage(report.of(Grade.WARN), "at least 2.25 times")).isTrue();
+    }
+
+    @Test
+    void aShipperCodeWithAThirteenDigitGtinIsBlockedAtTheBarcode() {
+        LintReport report = check(SHIPPER.replace("09501101530003", "0950110153000"));
+        assertThat(report.of(Grade.STOP)).anySatisfy(item -> {
+            assertThat(item.where()).isEqualTo("code");
+            assertThat(item.message()).contains("exactly fourteen digits");
+        });
+    }
+
+    @Test
+    void code128DataTheSymbolCannotCarryIsNamedAtTheBarcode() {
+        LintReport report =
+                check("LABEL c 104\nFIELD t TEXT CAF\u00c9\nBARCODE code 0,0 t height=40 module=3 human=0\nEND\n");
+        assertThat(report.of(Grade.STOP)).anyMatch(item -> item.where().equals("code"));
+    }
+
     @Test
     void aGs1SymbolFedFromACounterIsLeftToTheRender() {
         LintReport report = check(CASE_CODE.replace("FIELD gs1 TEXT (01)09501101530003(10)A12", "FIELD gs1 COUNTER"));

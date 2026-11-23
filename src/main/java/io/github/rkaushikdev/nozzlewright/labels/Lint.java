@@ -188,12 +188,12 @@ public final class Lint {
         if (kind.isEmpty()) {
             return List.of(new Finding(Grade.STOP, element.name(), "this build does not print " + element.symbology()));
         }
-        List<Finding> findings = new ArrayList<>();
+        List<Finding> findings = new ArrayList<>(checkData(element, kind.get(), template));
         switch (kind.get()) {
             case CODE39 -> findings.addAll(checkCode39(element));
-            case GS1_128 -> findings.addAll(checkGs1(element, template));
-            case CODE128 -> {
-                // Plain Code 128 carries any printable text and has nothing of its own to check.
+            case ITF14 -> findings.addAll(checkItf14(element));
+            case CODE128, GS1_128 -> {
+                // Code 128 has no ratio and no check option, so its data is all there is to check.
             }
         }
         if (element.moduleDots() < MIN_SCANNABLE_MODULE) {
@@ -213,19 +213,33 @@ public final class Lint {
     }
 
     /**
-     * A GS1-128 symbol fed from fixed text is checked here, so the finding names the barcode rather
-     * than the render. Data that only exists at print time is checked when it renders.
+     * Barcode data fed from fixed text is checked here, so the finding names the barcode rather than
+     * the render. Data that only exists at print time is checked when it renders.
      */
-    private static List<Finding> checkGs1(BarcodeElement element, LabelTemplate template) {
+    private static List<Finding> checkData(BarcodeElement element, Symbology kind, LabelTemplate template) {
         if (!(template.field(element.source()) instanceof TextField text)) {
             return List.of();
         }
         try {
-            Gs1.parse(text.value());
+            kind.check(text.value());
             return List.of();
         } catch (LabelError error) {
             return List.of(new Finding(Grade.STOP, element.name(), error.getMessage()));
         }
+    }
+
+    /**
+     * ITF-14 is read off soft board, and GS1 asks for a wide bar at least two and a quarter times the
+     * narrow one. A two to one symbol prints and then fails a case audit.
+     */
+    private static List<Finding> checkItf14(BarcodeElement element) {
+        if (element.wideRatio() >= Code39.MAX_RATIO) {
+            return List.of();
+        }
+        return List.of(new Finding(
+                Grade.WARN,
+                element.name(),
+                "ITF-14 wants a wide bar at least 2.25 times the narrow one, ratio=" + Code39.MAX_RATIO + " meets it"));
     }
 
     /** Render the message and measure what came out. */

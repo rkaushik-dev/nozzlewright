@@ -235,6 +235,43 @@ class RasterTest {
     }
 
     @Test
+    void anItf14SymbolCarriesBearerBarsAcrossItsQuietZones() {
+        ResolvedLabel resolved = label(
+                48,
+                text("09501101530003"),
+                barcode()
+                        .symbology("ITF-14")
+                        .heightDots(40)
+                        .humanReadable(false)
+                        .build());
+        DotMatrix matrix = Raster.render(resolved, standardFonts());
+        assertThat(matrix.width())
+                .isEqualTo(Itf14.modulesFor("09501101530003", 2).size() * 2);
+        for (int y : List.of(0, 3, 36, 39)) {
+            assertThat(matrix.get(0, y))
+                    .as("bearer row %d over the quiet zone", y)
+                    .isTrue();
+        }
+        assertThat(matrix.get(0, 4)).isFalse();
+        assertThat(matrix.get(0, 35)).isFalse();
+    }
+
+    @Test
+    void anItf14SymbolTooShortForItsBearersIsRefused() {
+        ResolvedLabel resolved = label(
+                48,
+                text("09501101530003"),
+                barcode()
+                        .symbology("ITF-14")
+                        .heightDots(16)
+                        .humanReadable(false)
+                        .build());
+        assertThatThrownBy(() -> Raster.render(resolved, standardFonts()))
+                .isInstanceOf(LabelError.class)
+                .hasMessageContaining("too short for ITF-14 bearer bars");
+    }
+
+    @Test
     void aCode39CheckCharacterMakesItWider() {
         ResolvedLabel plain = label(
                 48,

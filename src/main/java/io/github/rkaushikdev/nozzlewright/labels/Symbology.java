@@ -1,5 +1,6 @@
 package io.github.rkaushikdev.nozzlewright.labels;
 
+import io.github.rkaushikdev.nozzlewright.LabelError;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.Optional;
@@ -14,7 +15,8 @@ import java.util.Optional;
 public enum Symbology {
     CODE128("CODE128"),
     CODE39("CODE39"),
-    GS1_128("GS1-128");
+    GS1_128("GS1-128"),
+    ITF14("ITF-14");
 
     private final String word;
 
@@ -30,6 +32,20 @@ public enum Symbology {
     /** True for the symbologies whose data is GS1 element strings rather than free text. */
     public boolean carriesGs1() {
         return this == GS1_128;
+    }
+
+    /**
+     * Check that this symbology can carry {@code data}, without drawing it.
+     *
+     * @throws LabelError naming what is wrong with the data
+     */
+    public void check(String data) {
+        switch (this) {
+            case CODE128 -> Code128.encode(data);
+            case CODE39 -> Code39.encode(data);
+            case GS1_128 -> Gs1.parse(data);
+            case ITF14 -> Itf14.check(data);
+        }
     }
 
     /** The symbology a stored word names, matched without regard to case. */
