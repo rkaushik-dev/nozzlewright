@@ -113,9 +113,50 @@ class LintTest {
 
     @Test
     void aNarrowBarcodeIsAWarning() {
-        LintReport report = check(GOOD.replace("module=3", "module=" + (Lint.MIN_SCANNABLE_MODULE - 1)));
+        LintReport report = check(GOOD.replace("module=3", "module=1"));
         assertThat(report.ok()).isTrue();
-        assertThat(anyMessage(report.of(Grade.WARN), "hand scanner")).isTrue();
+        assertThat(anyMessage(report.of(Grade.WARN), "is 0.085 mm, under the 0.165 mm a hand scanner needs"))
+                .isTrue();
+    }
+
+    @Test
+    void twoDotsIsEnoughAtThreeHundredDpi() {
+        LintReport report = check(GOOD.replace("module=3", "module=2"));
+        assertThat(anyMessage(report.of(Grade.WARN), "hand scanner")).isFalse();
+    }
+
+    @Test
+    void theSameModuleIsTooNarrowOnAFinerHead() {
+        LintReport report = check(GOOD.replace("module=3", "module=2"), head(2, 600));
+        assertThat(anyMessage(report.of(Grade.WARN), "a 2 dot module at 600 dpi is 0.085 mm"))
+                .isTrue();
+    }
+
+    @Test
+    void aCaseCodeNeedsTheLogisticsBarWidth() {
+        LintReport narrow = check(CASE_CODE);
+        assertThat(anyMessage(narrow.of(Grade.WARN), "is 0.254 mm, under the 0.495 mm a case scanner needs"))
+                .isTrue();
+        LintReport wide = check(CASE_CODE.replace("module=3", "module=6"));
+        assertThat(anyMessage(wide.of(Grade.WARN), "case scanner")).isFalse();
+    }
+
+    @Test
+    void aCaseCodeOnOnePenIsTooShortForADistributionCentre() {
+        LintReport report = check(CASE_CODE);
+        assertThat(anyMessage(report.of(Grade.WARN), "bars 3.4 mm tall are short of the 31.75 mm"))
+                .isTrue();
+        assertThat(anyMessage(report.of(Grade.WARN), "aim a scanner")).isFalse();
+    }
+
+    @Test
+    void aShipperCodeAcrossFourPensIsTallEnough() {
+        String tall = "LABEL shipper 416\n"
+                + "FIELD gtin TEXT 09501101530003\n"
+                + "BARCODE code 0,0 gtin symbology=ITF-14 height=400 module=6 human=0 ratio=3\n"
+                + "END\n";
+        LintReport report = check(tall, head(4, 300));
+        assertThat(report.of(Grade.WARN)).isEmpty();
     }
 
     @Test
@@ -161,7 +202,7 @@ class LintTest {
     void aSoundShipperCodePasses() {
         LintReport report = check(SHIPPER);
         assertThat(report.of(Grade.STOP)).isEmpty();
-        assertThat(report.of(Grade.WARN)).noneMatch(item -> item.message().contains("ITF-14"));
+        assertThat(report.of(Grade.WARN)).noneMatch(item -> item.message().contains("2.25 times"));
     }
 
     @Test

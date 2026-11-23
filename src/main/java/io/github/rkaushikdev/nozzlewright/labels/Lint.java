@@ -1,6 +1,7 @@
 package io.github.rkaushikdev.nozzlewright.labels;
 
 import io.github.rkaushikdev.nozzlewright.LabelError;
+import io.github.rkaushikdev.nozzlewright.printer.Axis;
 import io.github.rkaushikdev.nozzlewright.printer.HeadGeometry;
 import io.github.rkaushikdev.nozzlewright.util.Numbers;
 import io.github.rkaushikdev.nozzlewright.util.Repr;
@@ -27,12 +28,6 @@ import java.util.stream.Collectors;
  * broken labels or blocking good ones, and both have happened.
  */
 public final class Lint {
-
-    /**
-     * Below this a hand scanner starts to struggle on a printed code. Two dots at 300 dpi is about
-     * 0.17 mm, which is the low end of what the standard allows.
-     */
-    public static final int MIN_SCANNABLE_MODULE = 2;
 
     /** A barcode shorter than this is hard to aim a scanner at. */
     public static final int MIN_SCANNABLE_HEIGHT = 24;
@@ -196,14 +191,37 @@ public final class Lint {
                 // Code 128 has no ratio and no check option, so its data is all there is to check.
             }
         }
-        if (element.moduleDots() < MIN_SCANNABLE_MODULE) {
+        findings.addAll(checkDimensions(element, kind.get(), head));
+        return findings;
+    }
+
+    /**
+     * The bar width and bar height against the floor the symbology sets, both in millimetres.
+     *
+     * <p>A module is a whole number of dot columns, so what it measures depends on the firing rate:
+     * two dots is a good Code 128 at 300 dpi and an unreadable one at 600. Comparing millimetres is
+     * the only comparison that survives a head change. Bar height is measured across the nozzles.
+     */
+    private static List<Finding> checkDimensions(BarcodeElement element, Symbology kind, HeadGeometry head) {
+        List<Finding> findings = new ArrayList<>();
+        double xMm = head.dotsToMm(element.moduleDots(), Axis.X);
+        if (xMm < kind.minimumXmm()) {
             findings.add(new Finding(
                     Grade.WARN,
                     element.name(),
-                    "a " + element.moduleDots() + " dot module at " + head.horizontalDpi()
-                            + " dpi is under what a hand scanner likes"));
+                    "a " + element.moduleDots() + " dot module at " + head.horizontalDpi() + " dpi is "
+                            + Numbers.fixed(xMm, 3) + " mm, under the " + Numbers.fixed(kind.minimumXmm(), 3)
+                            + " mm " + (kind.minimumHeightMm() > 0 ? "a case scanner" : "a hand scanner")
+                            + " needs"));
         }
-        if (element.heightDots() < MIN_SCANNABLE_HEIGHT) {
+        double heightMm = head.dotsToMm(element.heightDots(), Axis.Y);
+        if (kind.minimumHeightMm() > 0 && heightMm < kind.minimumHeightMm()) {
+            findings.add(new Finding(
+                    Grade.WARN,
+                    element.name(),
+                    "bars " + Numbers.fixed(heightMm, 1) + " mm tall are short of the "
+                            + Numbers.fixed(kind.minimumHeightMm(), 2) + " mm a distribution centre scans"));
+        } else if (element.heightDots() < MIN_SCANNABLE_HEIGHT) {
             findings.add(new Finding(
                     Grade.WARN,
                     element.name(),
