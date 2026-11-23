@@ -197,6 +197,16 @@ class LabelDiffTest {
     }
 
     @Test
+    void aBestBeforeRoundedToTheMonthEnd() {
+        LabelTemplate after = withFields(
+                CODE, new ExpiryField("expiry", "%d/%m/%Y", new ShelfLife(0, 180, ShelfLife.Rounding.MONTH)));
+        Change change = diff(label(), after).ofKind(ChangeKind.FIELD_CHANGED).get(0);
+        assertThat(change.attribute()).isEqualTo("round");
+        assertThat(change.before()).isEqualTo("none");
+        assertThat(change.after()).isEqualTo("month");
+    }
+
+    @Test
     void aCounterStartThatMoved() {
         LabelTemplate before = withFields(new CounterField("serial").withStart(1));
         LabelTemplate after = withFields(new CounterField("serial").withStart(5000));

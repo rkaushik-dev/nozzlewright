@@ -11,21 +11,24 @@ import java.util.Map;
 /**
  * A date offset forward from today, for a best before or a use by.
  *
- * <p>Months are added first and clamp to the end of a shorter month, then days are added, and the
- * time of day is kept. See {@link DateCode#addMonths}.
+ * <p>The offset is a {@link ShelfLife}: months, then days, then an optional rounding to the end of the
+ * month. The time of day is kept.
  */
 public final class ExpiryField extends Field {
 
     private final String pattern;
-    private final int days;
-    private final int months;
+    private final ShelfLife shelfLife;
 
     /** A field rendering {@code pattern} at today plus {@code months} and {@code days}. */
     public ExpiryField(String name, String pattern, int days, int months) {
+        this(name, pattern, new ShelfLife(months, days));
+    }
+
+    /** A field rendering {@code pattern} at today moved on by {@code shelfLife}. */
+    public ExpiryField(String name, String pattern, ShelfLife shelfLife) {
         super(name);
         this.pattern = pattern;
-        this.days = days;
-        this.months = months;
+        this.shelfLife = shelfLife;
     }
 
     /** The date pattern. */
@@ -35,12 +38,17 @@ public final class ExpiryField extends Field {
 
     /** Days added after the months. */
     public int days() {
-        return days;
+        return shelfLife.days();
     }
 
     /** Months added first. */
     public int months() {
-        return months;
+        return shelfLife.months();
+    }
+
+    /** The whole offset, rounding included. */
+    public ShelfLife shelfLife() {
+        return shelfLife;
     }
 
     @Override
@@ -48,7 +56,7 @@ public final class ExpiryField extends Field {
         if (pattern.isEmpty()) {
             throw new LabelError("expiry field " + name() + " has no pattern");
         }
-        if (days == 0 && months == 0) {
+        if (shelfLife.isZero()) {
             throw new LabelError("expiry field " + name() + " has no offset, use a date field");
         }
         DateCode.format(pattern, DateField.PROBE);
@@ -56,25 +64,22 @@ public final class ExpiryField extends Field {
 
     @Override
     public String render(FieldContext context) {
-        LocalDate shifted = context.now().toLocalDate();
-        if (months != 0) {
-            shifted = DateCode.addMonths(shifted, months);
-        }
-        if (days != 0) {
-            shifted = DateCode.addDays(shifted, days);
-        }
-        return DateCode.format(pattern, shifted.atTime(context.now().toLocalTime()));
+        LocalDate expires = shelfLife.apply(context.now().toLocalDate());
+        return DateCode.format(pattern, expires.atTime(context.now().toLocalTime()));
     }
 
     @Override
     public String toSource() {
         List<String> parts = new ArrayList<>();
         parts.add("FIELD " + name() + " EXPIRY " + pattern);
-        if (days != 0) {
-            parts.add("days=" + days);
+        if (shelfLife.days() != 0) {
+            parts.add("days=" + shelfLife.days());
         }
-        if (months != 0) {
-            parts.add("months=" + months);
+        if (shelfLife.months() != 0) {
+            parts.add("months=" + shelfLife.months());
+        }
+        if (shelfLife.rounding() != ShelfLife.Rounding.NONE) {
+            parts.add("round=" + shelfLife.rounding().word());
         }
         return String.join(" ", parts);
     }
@@ -83,8 +88,9 @@ public final class ExpiryField extends Field {
     public Map<String, Object> attributes() {
         Map<String, Object> attributes = new LinkedHashMap<>();
         attributes.put("pattern", pattern);
-        attributes.put("days", days);
-        attributes.put("months", months);
+        attributes.put("days", shelfLife.days());
+        attributes.put("months", shelfLife.months());
+        attributes.put("round", shelfLife.rounding().word());
         return Collections.unmodifiableMap(attributes);
     }
 }

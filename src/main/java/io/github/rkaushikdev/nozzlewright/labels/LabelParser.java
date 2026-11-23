@@ -23,6 +23,7 @@ import java.util.Set;
  *     FIELD brand TEXT HALVEX
  *     FIELD made DATE DD/MM/YY
  *     FIELD bb EXPIRY DD/MM/YY months=6
+ *     FIELD bbe EXPIRY MM/YYYY months=18 round=month
  *     FIELD serial COUNTER start=1 step=1 width=6 pad=0
  *     TEXT line1 0,0 brand font=10x14
  *     TEXT line2 0,20 made
@@ -220,7 +221,13 @@ final class LabelParser {
                 Map<String, String> options = options(rest.subList(1, rest.size()), lineNumber);
                 int days = intOption(options, "days", 0, lineNumber);
                 int months = intOption(options, "months", 0, lineNumber);
-                return new ExpiryField(name, rest.get(0), days, months);
+                ShelfLife.Rounding rounding;
+                try {
+                    rounding = ShelfLife.Rounding.parse(options.getOrDefault("round", "none"));
+                } catch (LabelError error) {
+                    throw new LabelError(error.getMessage(), lineNumber);
+                }
+                return new ExpiryField(name, rest.get(0), new ShelfLife(months, days, rounding));
             }
             case "COUNTER" -> {
                 Map<String, String> options = options(rest, lineNumber);
