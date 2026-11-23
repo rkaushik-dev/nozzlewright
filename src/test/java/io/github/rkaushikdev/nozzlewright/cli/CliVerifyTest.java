@@ -106,6 +106,32 @@ class CliVerifyTest {
         assertThat(body.get("dots_lost").asInt()).isPositive();
     }
 
+    static final String DATE_CODE = "LABEL dated 40\nFIELD brand TEXT HALVEX\nTEXT line1 0,0 brand font=10x14\nEND\n";
+
+    @Test
+    void verifySuggestsHowFarToMoveAShortMessage() throws Exception {
+        LabelStore store = new LabelStore(tmp.resolve("labels"));
+        store.open();
+        store.save(LabelTemplate.parse(DATE_CODE));
+        bench.blockNozzles(1, 0, 2, 3, 4, 5, 6, 7);
+        Cli.Result plain = run("printer", "verify", "line4", "dated");
+        assertThat(plain.exitCode()).isEqualTo(1);
+        assertThat(plain.stdout()).doesNotContain("shift_dots");
+
+        JsonNode body = json(run("printer", "verify", "line4", "dated", "--suggest-shift", "--json")
+                .stdout());
+        assertThat(body.get("legibility").asText()).isEqualTo("unreadable");
+        assertThat(body.get("shift_dots").asInt()).isEqualTo(8);
+        assertThat(body.get("shift_legibility").asText()).isEqualTo("clean");
+    }
+
+    @Test
+    void verifySaysNoMoveWhenNoneHelps() {
+        Cli.Result result = run("printer", "verify", "line4", "carton", "--suggest-shift");
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.stdout()).contains("shift_dots=0");
+    }
+
     @Test
     void aNozzleThroughTheBarcodeStopsIt() {
         bench.blockNozzles(1, 0, 45);

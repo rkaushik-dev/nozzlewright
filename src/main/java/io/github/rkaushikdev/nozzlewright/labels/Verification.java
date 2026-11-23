@@ -62,7 +62,7 @@ public record Verification(
      * @see #verify(ResolvedLabel, DotMatrix, HeadHealth, HeadGeometry, FontStore)
      */
     public static Verification verify(ResolvedLabel resolved, DotMatrix matrix, HeadHealth health, HeadGeometry head) {
-        return judge(resolved, matrix, health, head, Optional.empty());
+        return judge(resolved, matrix, health.deadRows(head), Optional.empty());
     }
 
     /**
@@ -75,12 +75,40 @@ public record Verification(
      */
     public static Verification verify(
             ResolvedLabel resolved, DotMatrix matrix, HeadHealth health, HeadGeometry head, FontStore fonts) {
-        return judge(resolved, matrix, health, head, Optional.of(fonts));
+        return judge(resolved, matrix, health.deadRows(head), Optional.of(fonts));
     }
 
-    private static Verification judge(
-            ResolvedLabel resolved, DotMatrix matrix, HeadHealth health, HeadGeometry head, Optional<FontStore> fonts) {
+    /**
+     * Where to move a message down the head so the fewest of its dots land on dead rows.
+     *
+     * <p>A head with a run of dead nozzles near the top often has clean rows below the message. Moving
+     * the message down by the right number of dots is a setting change rather than a cartridge, and it
+     * keeps a line running until the cartridge change at the end of the shift. Every offset that keeps
+     * the message on the head is tried, and the best is the one with the best legibility, then the
+     * fewest dots lost, then the smallest move. Empty when no move does better than where it sits.
+     */
+    public static Optional<RowShift> bestShift(
+            ResolvedLabel resolved, DotMatrix matrix, HeadHealth health, HeadGeometry head, FontStore fonts) {
         List<Integer> dead = health.deadRows(head);
+        Verification here = judge(resolved, matrix, dead, Optional.of(fonts));
+        RowShift best = new RowShift(0, here);
+        for (int offset = 1; offset + resolved.heightDots() <= head.heightDots(); offset++) {
+            int by = offset;
+            List<Integer> seen = dead.stream().map(row -> row - by).toList();
+            RowShift candidate = new RowShift(offset, judge(resolved, matrix, seen, Optional.of(fonts)));
+            if (candidate.betterThan(best)) {
+                best = candidate;
+            }
+        }
+        return best.offsetDots() == 0 ? Optional.empty() : Optional.of(best);
+    }
+
+    /**
+     * The verdict for a message whose dot rows {@code dead} will not fire, counted from its top. Rows
+     * above or below the message are carried and lose nothing.
+     */
+    private static Verification judge(
+            ResolvedLabel resolved, DotMatrix matrix, List<Integer> dead, Optional<FontStore> fonts) {
         BigInteger mask = BigInteger.ZERO;
         for (int row : dead) {
             if (row >= 0 && row < matrix.height()) {

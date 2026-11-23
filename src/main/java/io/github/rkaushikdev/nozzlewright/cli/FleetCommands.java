@@ -16,7 +16,6 @@ import io.github.rkaushikdev.nozzlewright.fleet.ShiftReport;
 import io.github.rkaushikdev.nozzlewright.fleet.ShiftSpan;
 import io.github.rkaushikdev.nozzlewright.fleet.Shifts;
 import io.github.rkaushikdev.nozzlewright.fleet.Spend;
-import io.github.rkaushikdev.nozzlewright.labels.FieldContext;
 import io.github.rkaushikdev.nozzlewright.labels.FontStore;
 import io.github.rkaushikdev.nozzlewright.labels.LabelStore;
 import io.github.rkaushikdev.nozzlewright.labels.LabelTemplate;
@@ -576,12 +575,8 @@ final class FleetCommands extends Group {
                     continue;
                 }
                 LabelTemplate template = store.load(label);
-                FieldContext fields = FieldContext.builder(at)
-                        .counters(LabelCommands.counters(template, 1))
-                        .prompts(LabelCommands.standIns(template))
-                        .shifts(LabelCommands.shiftsOf(context))
-                        .build();
-                drops.put(label, Costing.dropsIn(Raster.render(template.resolve(fields), fonts)));
+                drops.put(
+                        label, Costing.dropsIn(Raster.render(LabelCommands.standIn(context, template, at, 1), fonts)));
             }
             return Costing.spendOver(printed, drops, model);
         }

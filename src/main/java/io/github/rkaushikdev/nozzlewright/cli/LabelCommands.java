@@ -16,6 +16,7 @@ import io.github.rkaushikdev.nozzlewright.labels.LintReport;
 import io.github.rkaushikdev.nozzlewright.labels.Proof;
 import io.github.rkaushikdev.nozzlewright.labels.ProofOptions;
 import io.github.rkaushikdev.nozzlewright.labels.Raster;
+import io.github.rkaushikdev.nozzlewright.labels.ResolvedLabel;
 import io.github.rkaushikdev.nozzlewright.labels.ShiftWindow;
 import io.github.rkaushikdev.nozzlewright.printer.CartridgeSpec;
 import io.github.rkaushikdev.nozzlewright.printer.InkFamily;
@@ -99,6 +100,18 @@ final class LabelCommands extends Group {
         Map<String, Long> counters = new LinkedHashMap<>();
         template.fields().forEach(item -> counters.put(item.name(), counter));
         return counters;
+    }
+
+    /**
+     * A label resolved the way a command renders one on its own: at {@code at}, every counter at
+     * {@code counter}, every prompt answered with a stand in, over the site's shifts.
+     */
+    static ResolvedLabel standIn(Context context, LabelTemplate template, LocalDateTime at, long counter) {
+        return template.resolve(FieldContext.builder(at)
+                .counters(counters(template, counter))
+                .prompts(standIns(template))
+                .shifts(shiftsOf(context))
+                .build());
     }
 
     /** Every interactive field of a label answered with a stand in. */
@@ -265,12 +278,7 @@ final class LabelCommands extends Group {
             CostModel chosen = purges >= 0 ? model.get().withPurgesPerThousand(purges) : model.get();
 
             LabelTemplate template = parseFile(source);
-            FieldContext fields = FieldContext.builder(whenOrNow(at))
-                    .counters(counters(template, counter))
-                    .prompts(standIns(template))
-                    .shifts(shiftsOf(context))
-                    .build();
-            DotMatrix matrix = Raster.render(template.resolve(fields), defaultFonts());
+            DotMatrix matrix = Raster.render(standIn(context, template, whenOrNow(at), counter), defaultFonts());
             Output.emit(
                     out(), Costing.costOfLabel(template.name(), matrix, chosen).asMap(), asJson);
             return Main.OK;

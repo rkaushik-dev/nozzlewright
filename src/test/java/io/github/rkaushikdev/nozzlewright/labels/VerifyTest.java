@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class VerifyTest {
@@ -62,6 +63,52 @@ class VerifyTest {
 
     static int[] dead(int... nozzles) {
         return nozzles;
+    }
+
+    static Optional<RowShift> shift(int height, int[] dead, Element... elements) {
+        ResolvedLabel resolved = label(height, elements);
+        DotMatrix matrix = Raster.render(resolved, standardFonts());
+        return Verification.bestShift(resolved, matrix, health(0, dead), head(), standardFonts());
+    }
+
+    @Test
+    void aShortMessageMovesBelowTheDeadRows() {
+        Optional<RowShift> best = shift(40, dead(2, 3, 4, 5, 6, 7), TEXT);
+        assertThat(best).map(RowShift::offsetDots).contains(8);
+        assertThat(best.orElseThrow().verification().legibility()).isSameAs(Legibility.CLEAN);
+        assertThat(best.orElseThrow().asMap())
+                .containsEntry("shift_dots", 8)
+                .containsEntry("shift_legibility", "clean")
+                .containsEntry("shift_dots_lost", 0);
+    }
+
+    @Test
+    void theSmallestMoveThatPrintsCleanWins() {
+        assertThat(shift(40, dead(4), TEXT)).map(RowShift::offsetDots).contains(5);
+    }
+
+    @Test
+    void aHealthyHeadNeedsNoMove() {
+        assertThat(shift(40, dead(), TEXT)).isEmpty();
+    }
+
+    @Test
+    void aMessageAsTallAsTheHeadCannotMove() {
+        assertThat(shift(104, dead(2, 3, 4, 5, 6, 7), TEXT)).isEmpty();
+    }
+
+    @Test
+    void deadRowsBelowAShortMessageNeedNoMove() {
+        assertThat(shift(40, dead(60, 61, 62), TEXT)).isEmpty();
+    }
+
+    @Test
+    void aBetterLegibilityBeatsFewerLostDots() {
+        Verification clean = verify(dead(), TEXT);
+        Verification marked = verify(dead(4), TEXT);
+        assertThat(new RowShift(9, clean).betterThan(new RowShift(1, marked))).isTrue();
+        assertThat(new RowShift(1, marked).betterThan(new RowShift(9, clean))).isFalse();
+        assertThat(new RowShift(2, clean).betterThan(new RowShift(9, clean))).isTrue();
     }
 
     @Test

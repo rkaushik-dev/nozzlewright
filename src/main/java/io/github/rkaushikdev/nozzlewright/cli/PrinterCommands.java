@@ -1,12 +1,12 @@
 package io.github.rkaushikdev.nozzlewright.cli;
 
 import io.github.rkaushikdev.nozzlewright.labels.DotMatrix;
-import io.github.rkaushikdev.nozzlewright.labels.FieldContext;
 import io.github.rkaushikdev.nozzlewright.labels.FontStore;
 import io.github.rkaushikdev.nozzlewright.labels.LabelStore;
 import io.github.rkaushikdev.nozzlewright.labels.LabelTemplate;
 import io.github.rkaushikdev.nozzlewright.labels.Raster;
 import io.github.rkaushikdev.nozzlewright.labels.ResolvedLabel;
+import io.github.rkaushikdev.nozzlewright.labels.RowShift;
 import io.github.rkaushikdev.nozzlewright.labels.Verification;
 import io.github.rkaushikdev.nozzlewright.printer.Advice;
 import io.github.rkaushikdev.nozzlewright.printer.ApplyReport;
@@ -272,6 +272,11 @@ final class PrinterCommands extends Group {
         @Option(names = "--json", description = "Print JSON.")
         private boolean asJson;
 
+        @Option(
+                names = "--suggest-shift",
+                description = "Also say how far down the head to move the message to miss the dead rows.")
+        private boolean suggestShift;
+
         /** What the machine said about itself. */
         private record Reading(HeadHealth health, String wanted, HeadGeometry head) {}
 
@@ -294,14 +299,16 @@ final class PrinterCommands extends Group {
 
             LabelTemplate template = store.load(reading.wanted());
             FontStore fonts = LabelCommands.defaultFonts();
-            ResolvedLabel resolved = template.resolve(FieldContext.builder(LabelCommands.whenOrNow(at))
-                    .counters(LabelCommands.counters(template, counter))
-                    .prompts(LabelCommands.standIns(template))
-                    .shifts(LabelCommands.shiftsOf(context))
-                    .build());
+            ResolvedLabel resolved = LabelCommands.standIn(context, template, LabelCommands.whenOrNow(at), counter);
             DotMatrix matrix = Raster.render(resolved, fonts);
             Verification result = Verification.verify(resolved, matrix, reading.health(), reading.head(), fonts);
-            Output.emit(out(), result.asMap(), asJson);
+            Map<String, Object> body = new LinkedHashMap<>(result.asMap());
+            if (suggestShift) {
+                Optional<RowShift> shift =
+                        Verification.bestShift(resolved, matrix, reading.health(), reading.head(), fonts);
+                body.putAll(shift.map(RowShift::asMap).orElse(Map.of("shift_dots", 0)));
+            }
+            Output.emit(out(), body, asJson);
             if (!result.printable()) {
                 err().println(result.summary());
                 return Main.REFUSED;
