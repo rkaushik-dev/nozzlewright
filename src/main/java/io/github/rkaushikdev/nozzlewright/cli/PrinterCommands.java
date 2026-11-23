@@ -1,5 +1,6 @@
 package io.github.rkaushikdev.nozzlewright.cli;
 
+import io.github.rkaushikdev.nozzlewright.fleet.CartridgeForecast;
 import io.github.rkaushikdev.nozzlewright.labels.DotMatrix;
 import io.github.rkaushikdev.nozzlewright.labels.FontStore;
 import io.github.rkaushikdev.nozzlewright.labels.LabelStore;
@@ -26,8 +27,14 @@ import io.github.rkaushikdev.nozzlewright.protocol.Dialect;
 import io.github.rkaushikdev.nozzlewright.protocol.Response;
 import io.github.rkaushikdev.nozzlewright.protocol.VerbSupport;
 import io.github.rkaushikdev.nozzlewright.session.Operator;
+import io.github.rkaushikdev.nozzlewright.storage.CartridgeFitting;
+import io.github.rkaushikdev.nozzlewright.storage.CartridgeRepo;
+import io.github.rkaushikdev.nozzlewright.storage.Printer;
+import io.github.rkaushikdev.nozzlewright.storage.PrinterRepo;
 import io.github.rkaushikdev.nozzlewright.util.Durations;
+import io.github.rkaushikdev.nozzlewright.util.Times;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -107,9 +114,15 @@ final class PrinterCommands extends Group {
         @Option(names = "--json", description = "Print JSON.")
         private boolean asJson;
 
+        @Option(
+                names = "--record",
+                description = "Write the cartridges into the site database, and say when each one's service life ends.")
+        private boolean record;
+
         @Override
         public Integer call() throws InterruptedException {
             List<InkReading> levels = context().connected(printerId, Operations::readInk);
+            Map<Integer, String> serviceEnds = record ? recordFittings(levels) : Map.of();
             List<Map<String, Object>> rows = new ArrayList<>();
             for (InkReading level : levels) {
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -117,10 +130,31 @@ final class PrinterCommands extends Group {
                 row.put("percent", level.level());
                 row.put("low", level.isLow());
                 row.put("serial", level.serial().isEmpty() ? "-" : level.serial());
+                if (record) {
+                    row.put("service_ends", serviceEnds.getOrDefault(level.pen(), "-"));
+                }
                 rows.add(row);
             }
             Output.emit(out(), rows, asJson);
             return Main.OK;
+        }
+
+        /**
+         * Fold the reading into the fittings table, so the forecast, the trace and the shift report see
+         * this machine's cartridges, and return the last service day of each pen that has one.
+         */
+        private Map<Integer, String> recordFittings(List<InkReading> levels) {
+            Instant now = Times.now();
+            return FleetCommands.reading(context(), unit -> {
+                Printer printer = new PrinterRepo(unit).require(printerId);
+                CartridgeRepo repo = new CartridgeRepo(unit);
+                repo.observe(printer, levels, now);
+                Map<Integer, String> ends = new LinkedHashMap<>();
+                for (CartridgeFitting row : repo.openFittings(printer)) {
+                    CartridgeForecast.serviceEndsOn(repo, row).ifPresent(day -> ends.put(row.getPen(), day.toString()));
+                }
+                return ends;
+            });
         }
     }
 

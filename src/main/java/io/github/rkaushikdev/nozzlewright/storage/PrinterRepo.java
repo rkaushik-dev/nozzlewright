@@ -5,8 +5,10 @@ import io.github.rkaushikdev.nozzlewright.NozzlewrightError;
 import io.github.rkaushikdev.nozzlewright.fleet.PrinterRecord;
 import io.github.rkaushikdev.nozzlewright.util.Times;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -51,6 +53,13 @@ public final class PrinterRepo {
         return unit.entities()
                 .createQuery("select p from Printer p order by p.printerId", Printer.class)
                 .getResultList();
+    }
+
+    /** Every machine's site id by its row id, which is how the other tables point at a machine. */
+    public Map<Integer, String> idsByKey() {
+        Map<Integer, String> ids = new HashMap<>();
+        all().forEach(printer -> ids.put(printer.getId(), printer.getPrinterId()));
+        return ids;
     }
 
     /**

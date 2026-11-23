@@ -219,7 +219,7 @@ public final class Export {
     /** Runs that started inside the window on the machines named, oldest first. */
     private static Stream<NamedRun> runs(UnitOfWork unit, Instant start, Instant end, List<String> names) {
         Set<String> wanted = new HashSet<>(names);
-        Map<Integer, String> lookup = printerIds(unit);
+        Map<Integer, String> lookup = new PrinterRepo(unit).idsByKey();
         return new JobRepo(unit)
                 .between(start, end).stream()
                         .map(run -> new NamedRun(lookup.getOrDefault(run.getPrinterPk(), ""), run))
@@ -300,14 +300,6 @@ public final class Export {
                             Times.iso(row.getFittedAt()),
                             stamp(row.getRemovedAt())));
         });
-    }
-
-    private static Map<Integer, String> printerIds(UnitOfWork unit) {
-        Map<Integer, String> lookup = new HashMap<>();
-        for (Printer printer : new PrinterRepo(unit).all()) {
-            lookup.put(printer.getId(), printer.getPrinterId());
-        }
-        return lookup;
     }
 
     private static void check(Instant start, Instant end) {

@@ -11,7 +11,6 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -40,8 +39,7 @@ public final class CartridgeForecast {
     /** Every fitted cartridge due out on or before {@code horizonDays} from {@code now}, soonest first. */
     public static List<CartridgeDue> due(UnitOfWork unit, Instant now, int horizonDays) {
         CartridgeRepo repo = new CartridgeRepo(unit);
-        Map<Integer, String> printerIds = new HashMap<>();
-        new PrinterRepo(unit).all().forEach(printer -> printerIds.put(printer.getId(), printer.getPrinterId()));
+        Map<Integer, String> printerIds = new PrinterRepo(unit).idsByKey();
         LocalDate last = day(now).plusDays(horizonDays);
         List<CartridgeDue> found = new ArrayList<>();
         for (CartridgeFitting row : repo.allOpen()) {
@@ -102,6 +100,18 @@ public final class CartridgeForecast {
         double pointsPerSecond = (double) row.usedPoints() / basis.toSeconds();
         long secondsLeft = (long) Math.ceil(row.getLastLevel() / pointsPerSecond);
         return Optional.of(day(now.plusSeconds(secondsLeft)));
+    }
+
+    /**
+     * The last day the cartridge in {@code row} may stay in service, counted from the first time its
+     * serial was fitted anywhere, when its ink family is known.
+     */
+    public static Optional<LocalDate> serviceEndsOn(CartridgeRepo repo, CartridgeFitting row) {
+        Instant firstFitted = repo.history(row.getSerial()).stream()
+                .map(CartridgeFitting::getFittedAt)
+                .min(Comparator.naturalOrder())
+                .orElse(row.getFittedAt());
+        return serviceEndsOn(row.getInkFamily(), firstFitted);
     }
 
     /** The last day the ink family allows, counted from the first fitting, when the family is known. */

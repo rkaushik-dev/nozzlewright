@@ -5,20 +5,27 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.rkaushikdev.nozzlewright.fleet.PrinterRecord;
 import io.github.rkaushikdev.nozzlewright.printer.FiringProfile;
 import io.github.rkaushikdev.nozzlewright.printer.FiringTable;
 import io.github.rkaushikdev.nozzlewright.printer.GroupGeometry;
 import io.github.rkaushikdev.nozzlewright.printer.Head;
 import io.github.rkaushikdev.nozzlewright.printer.HeadGeometry;
+import io.github.rkaushikdev.nozzlewright.printer.InkFamily;
 import io.github.rkaushikdev.nozzlewright.printer.MachineState;
 import io.github.rkaushikdev.nozzlewright.printer.PenGeometry;
 import io.github.rkaushikdev.nozzlewright.printer.PrintMode;
 import io.github.rkaushikdev.nozzlewright.printer.PrinterConfig;
 import io.github.rkaushikdev.nozzlewright.printer.SpeedSource;
 import io.github.rkaushikdev.nozzlewright.simulator.SimulatedPrinter;
+import io.github.rkaushikdev.nozzlewright.storage.CartridgeRepo;
+import io.github.rkaushikdev.nozzlewright.storage.Database;
+import io.github.rkaushikdev.nozzlewright.storage.PrinterRepo;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -103,6 +110,51 @@ class CliPrinterTest {
     void ink() throws Exception {
         JsonNode body = json(run("printer", "ink", "line4", "--json").stdout());
         assertThat(body.findValuesAsText("pen")).containsExactly("1", "2");
+    }
+
+    void databaseWithTheBench() {
+        try (Database database = Database.file(tmp.resolve(Context.DATABASE_NAME))) {
+            database.createAll();
+            database.run(unit -> new PrinterRepo(unit).upsert(new PrinterRecord("line4", "sim").withKind("loopback")));
+        }
+    }
+
+    @Test
+    void inkWithRecordWritesTheFittingsAndTheirServiceLife() throws Exception {
+        bench = SimulatedPrinter.builder()
+                .config(sampleConfig())
+                .labels(Map.of("carton", "x"))
+                .revision(2)
+                .build();
+        databaseWithTheBench();
+        JsonNode body =
+                json(run("printer", "ink", "line4", "--record", "--json").stdout());
+        String due = LocalDate.now(ZoneOffset.UTC)
+                .plusDays(InkFamily.MEK.serviceDays())
+                .toString();
+        assertThat(body.findValuesAsText("service_ends")).containsExactly(due, due);
+        try (Database database = Database.file(tmp.resolve(Context.DATABASE_NAME))) {
+            int open = database.apply(unit -> new CartridgeRepo(unit)
+                    .openFittings(new PrinterRepo(unit).require("line4"))
+                    .size());
+            assertThat(open).isEqualTo(2);
+        }
+    }
+
+    @Test
+    void inkWithoutRecordLeavesTheDatabaseAlone() throws Exception {
+        JsonNode body = json(run("printer", "ink", "line4", "--json").stdout());
+        assertThat(body.findValuesAsText("service_ends")).isEmpty();
+    }
+
+    @Test
+    void inkWithRecordForAMachineTheDatabaseDoesNotHold() {
+        try (Database database = Database.file(tmp.resolve(Context.DATABASE_NAME))) {
+            database.createAll();
+        }
+        Cli.Result result = run("printer", "ink", "line4", "--record");
+        assertThat(result.exitCode()).isEqualTo(Main.REFUSED);
+        assertThat(result.stderr()).contains("no machine called line4 in the database");
     }
 
     @Test
