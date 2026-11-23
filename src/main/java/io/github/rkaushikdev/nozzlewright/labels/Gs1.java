@@ -24,6 +24,9 @@ import java.util.stream.Collectors;
  */
 public final class Gs1 {
 
+    /** The most data characters one GS1-128 symbol carries, separators included. */
+    public static final int MAX_DATA = 48;
+
     /** The ASCII group separator, which stands for a function one character inside encoded data. */
     public static final char GROUP_SEPARATOR = '\u001d';
 
@@ -196,6 +199,8 @@ public final class Gs1 {
     /**
      * The data as the symbol carries it: no brackets, and a group separator closing every variable
      * length field that something follows.
+     *
+     * @throws LabelError when that is more than one symbol may carry
      */
     public static String encoded(List<Segment> segments) {
         StringBuilder out = new StringBuilder();
@@ -205,6 +210,10 @@ public final class Gs1 {
             if (!segment.fixedLength() && index < segments.size() - 1) {
                 out.append(GROUP_SEPARATOR);
             }
+        }
+        if (out.length() > MAX_DATA) {
+            throw new LabelError("GS1-128 carries at most " + MAX_DATA + " characters, " + humanReadable(segments)
+                    + " is " + out.length() + ", split it over two symbols");
         }
         return out.toString();
     }

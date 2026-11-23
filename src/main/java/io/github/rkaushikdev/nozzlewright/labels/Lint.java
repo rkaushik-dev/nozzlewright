@@ -1,7 +1,6 @@
 package io.github.rkaushikdev.nozzlewright.labels;
 
 import io.github.rkaushikdev.nozzlewright.LabelError;
-import io.github.rkaushikdev.nozzlewright.printer.Axis;
 import io.github.rkaushikdev.nozzlewright.printer.Head;
 import io.github.rkaushikdev.nozzlewright.printer.HeadGeometry;
 import io.github.rkaushikdev.nozzlewright.util.Numbers;
@@ -13,7 +12,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -214,7 +212,7 @@ public final class Lint {
         for (Element element : template.elements()) {
             switch (element) {
                 case TextElement text -> findings.addAll(checkText(text, template, fonts));
-                case BarcodeElement barcode -> findings.addAll(checkBarcode(barcode, template, head));
+                case BarcodeElement barcode -> findings.addAll(BarcodeLint.check(barcode, template, head));
                 case RuleElement rule
                 when rule.heightDots() > template.heightDots() ->
                     findings.add(new Finding(Grade.STOP, rule.name(), "the rule is taller than the label"));
@@ -264,110 +262,6 @@ public final class Lint {
         return value;
     }
 
-    /**
-     * The two things that go wrong on a Code 39 label.
-     *
-     * <p>Code 39 with no check character is what most sites ask for and it is also what lets a single
-     * misread bar turn one part number into another, so it is a note rather than a warning: worth
-     * saying, not worth blocking.
-     */
-    private static List<Finding> checkCode39(BarcodeElement element) {
-        List<Finding> findings = new ArrayList<>();
-        if (!element.checkDigit()) {
-            findings.add(new Finding(Grade.NOTE, element.name(), "code 39 without a check character is unprotected"));
-        }
-        if (element.wideRatio() < 3 && element.moduleDots() < 3) {
-            findings.add(new Finding(
-                    Grade.WARN,
-                    element.name(),
-                    "a two to one ratio at " + element.moduleDots() + " dots is at the edge of what reads"));
-        }
-        return findings;
-    }
-
-    /** Scannability checks for one barcode. */
-    private static List<Finding> checkBarcode(BarcodeElement element, LabelTemplate template, HeadGeometry head) {
-        Optional<Symbology> kind = element.printedAs();
-        if (kind.isEmpty()) {
-            return List.of(new Finding(Grade.STOP, element.name(), "this build does not print " + element.symbology()));
-        }
-        List<Finding> findings = new ArrayList<>(checkData(element, kind.get(), template));
-        switch (kind.get()) {
-            case CODE39, CODE39_FULL -> findings.addAll(checkCode39(element));
-            case ITF14 -> findings.addAll(checkItf14(element));
-            case CODE128, GS1_128 -> {
-                // Code 128 has no ratio and no check option, so its data is all there is to check.
-            }
-        }
-        findings.addAll(checkDimensions(element, kind.get(), head));
-        return findings;
-    }
-
-    /**
-     * The bar width and bar height against the floor the symbology sets, both in millimetres.
-     *
-     * <p>A module is a whole number of dot columns, so what it measures depends on the firing rate:
-     * two dots is a good Code 128 at 300 dpi and an unreadable one at 600. Comparing millimetres is
-     * the only comparison that survives a head change. Bar height is measured across the nozzles.
-     */
-    private static List<Finding> checkDimensions(BarcodeElement element, Symbology kind, HeadGeometry head) {
-        List<Finding> findings = new ArrayList<>();
-        double xMm = head.dotsToMm(element.moduleDots(), Axis.X);
-        if (xMm < kind.minimumXmm()) {
-            findings.add(new Finding(
-                    Grade.WARN,
-                    element.name(),
-                    "a " + element.moduleDots() + " dot module at " + head.horizontalDpi() + " dpi is "
-                            + Numbers.fixed(xMm, 3) + " mm, under the " + Numbers.fixed(kind.minimumXmm(), 3)
-                            + " mm " + (kind.minimumHeightMm() > 0 ? "a case scanner" : "a hand scanner")
-                            + " needs"));
-        }
-        double heightMm = head.dotsToMm(element.heightDots(), Axis.Y);
-        if (kind.minimumHeightMm() > 0 && heightMm < kind.minimumHeightMm()) {
-            findings.add(new Finding(
-                    Grade.WARN,
-                    element.name(),
-                    "bars " + Numbers.fixed(heightMm, 1) + " mm tall are short of the "
-                            + Numbers.fixed(kind.minimumHeightMm(), 2) + " mm a distribution centre scans"));
-        } else if (element.heightDots() < MIN_SCANNABLE_HEIGHT) {
-            findings.add(new Finding(
-                    Grade.WARN,
-                    element.name(),
-                    "a " + element.heightDots() + " dot high barcode is hard to aim a scanner at"));
-        }
-        return findings;
-    }
-
-    /**
-     * Barcode data fed from fixed text is checked here, so the finding names the barcode rather than
-     * the render. Data that only exists at print time is checked when it renders.
-     */
-    private static List<Finding> checkData(BarcodeElement element, Symbology kind, LabelTemplate template) {
-        if (!(template.field(element.source()) instanceof TextField text)) {
-            return List.of();
-        }
-        try {
-            kind.check(text.value());
-            return List.of();
-        } catch (LabelError error) {
-            return List.of(new Finding(Grade.STOP, element.name(), error.getMessage()));
-        }
-    }
-
-    /**
-     * ITF-14 is read off soft board, and GS1 asks for a wide bar at least two and a quarter times the
-     * narrow one. A two to one symbol prints and then fails a case audit.
-     */
-    private static List<Finding> checkItf14(BarcodeElement element) {
-        if (element.wideRatio() >= Code39.MAX_RATIO) {
-            return List.of();
-        }
-        return List.of(new Finding(
-                Grade.WARN,
-                element.name(),
-                "ITF-14 wants a wide bar at least 2.25 times the narrow one, ratio=" + Code39.MAX_RATIO + " meets it"));
-    }
-
     /** Render the message and measure what came out. */
     private static List<Finding> checkRender(
             LabelTemplate template,
@@ -391,7 +285,7 @@ public final class Lint {
             return List.of(new Finding(Grade.STOP, "render", Objects.requireNonNullElse(error.getMessage(), "")));
         }
 
-        List<Finding> findings = new ArrayList<>(checkQuietZones(footprints));
+        List<Finding> findings = new ArrayList<>(BarcodeLint.quietZones(footprints));
         double widthMm = head.dotsToMm(matrix.width());
         if (matrix.isEmpty()) {
             findings.add(new Finding(Grade.STOP, "render", "the message prints nothing"));
@@ -408,28 +302,6 @@ public final class Lint {
                     Grade.NOTE,
                     "render",
                     "coverage is " + Numbers.fixed(coverage * 100, 0) + "%, which is heavy on ink"));
-        }
-        return findings;
-    }
-
-    /**
-     * Anything printed inside a barcode's quiet zone.
-     *
-     * <p>A warning rather than a stop, because a scanner held square to a carton may still read past
-     * a stray character, but a fixed scanner over a conveyor usually will not.
-     */
-    private static List<Finding> checkQuietZones(List<Footprint> footprints) {
-        List<Finding> findings = new ArrayList<>();
-        for (Footprint barcode : footprints) {
-            for (Footprint other : footprints) {
-                if (other != barcode && barcode.intrudedBy(other)) {
-                    findings.add(new Finding(
-                            Grade.WARN,
-                            barcode.element(),
-                            other.element() + " prints inside the quiet zone, which is " + barcode.quietZone()
-                                    + " dots either side of the bars"));
-                }
-            }
         }
         return findings;
     }

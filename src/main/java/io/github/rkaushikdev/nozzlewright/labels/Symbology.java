@@ -79,7 +79,7 @@ public enum Symbology {
             case CODE128 -> Code128.encode(data);
             case CODE39 -> Code39.encode(data);
             case CODE39_FULL -> Code39.encodeFullAscii(data, false);
-            case GS1_128 -> Gs1.parse(data);
+            case GS1_128 -> Gs1.encoded(Gs1.parse(data));
             case ITF14 -> Itf14.check(data);
         }
     }

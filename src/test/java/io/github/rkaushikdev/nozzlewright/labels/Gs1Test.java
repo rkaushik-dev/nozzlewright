@@ -141,4 +141,20 @@ class Gs1Test {
     void aLeapDayIsAllowedInALeapYear() {
         assertThat(Gs1.parse("(11)280229")).hasSize(1);
     }
+
+    @Test
+    void fortyEightCharactersFitOneSymbol() {
+        // 16 for the GTIN, one separator after a 20 character batch, and a nine character serial.
+        String data = "(01)09501101530003(10)" + "A".repeat(18) + "(21)" + "B".repeat(9);
+        assertThat(Gs1.encoded(Gs1.parse(data))).hasSize(Gs1.MAX_DATA);
+    }
+
+    @Test
+    void moreThanFortyEightIsRefused() {
+        String data = "(01)09501101530003(10)" + "A".repeat(18) + "(21)" + "B".repeat(10);
+        assertThatThrownBy(() -> Gs1.encoded(Gs1.parse(data)))
+                .isInstanceOf(LabelError.class)
+                .hasMessageContaining("at most 48 characters")
+                .hasMessageEndingWith("is 49, split it over two symbols");
+    }
 }

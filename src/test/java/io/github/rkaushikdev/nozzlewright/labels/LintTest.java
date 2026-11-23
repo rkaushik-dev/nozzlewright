@@ -211,6 +211,33 @@ class LintTest {
     }
 
     @Test
+    void aLogisticsSymbolWithoutItsTextIsAWarning() {
+        LintReport shipper = check(SHIPPER);
+        assertThat(shipper.of(Grade.WARN)).anySatisfy(item -> {
+            assertThat(item.where()).isEqualTo("code");
+            assertThat(item.message()).startsWith("ITF-14 goes out with its human readable line");
+        });
+        LintReport cased = check(CASE_CODE);
+        assertThat(anyMessage(cased.of(Grade.WARN), "GS1-128 goes out with its human readable line"))
+                .isTrue();
+    }
+
+    @Test
+    void plainCode128NeedsNoText() {
+        assertThat(anyMessage(check(GOOD).findings(), "human readable")).isFalse();
+    }
+
+    @Test
+    void aCaseCodeTooLongForOneSymbolIsBlockedAtTheBarcode() {
+        String long1 = CASE_CODE.replace("(10)A12", "(10)" + "A".repeat(20) + "(21)" + "B".repeat(12));
+        LintReport report = check(long1);
+        assertThat(report.of(Grade.STOP)).anySatisfy(item -> {
+            assertThat(item.where()).isEqualTo("code");
+            assertThat(item.message()).contains("at most 48 characters").contains("is 53");
+        });
+    }
+
+    @Test
     void gradesThatBlock() {
         assertThat(Grade.STOP.blocks()).isTrue();
         assertThat(Grade.WARN.blocks()).isFalse();
@@ -309,7 +336,7 @@ class LintTest {
     void aShipperCodeAcrossFourPensIsTallEnough() {
         String tall = "LABEL shipper 416\n"
                 + "FIELD gtin TEXT 09501101530003\n"
-                + "BARCODE code 0,0 gtin symbology=ITF-14 height=400 module=6 human=0 ratio=3\n"
+                + "BARCODE code 0,0 gtin symbology=ITF-14 height=400 module=6 ratio=3\n"
                 + "END\n";
         LintReport report = check(tall, head(4, 300));
         assertThat(report.of(Grade.WARN)).isEmpty();
