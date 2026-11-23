@@ -14,11 +14,14 @@ import io.github.rkaushikdev.nozzlewright.labels.LabelDiff;
 import io.github.rkaushikdev.nozzlewright.labels.LabelRecord;
 import io.github.rkaushikdev.nozzlewright.labels.LabelStore;
 import io.github.rkaushikdev.nozzlewright.labels.LabelTemplate;
+import io.github.rkaushikdev.nozzlewright.labels.Lint;
+import io.github.rkaushikdev.nozzlewright.labels.LintReport;
 import io.github.rkaushikdev.nozzlewright.labels.Proof;
 import io.github.rkaushikdev.nozzlewright.labels.ProofOptions;
 import io.github.rkaushikdev.nozzlewright.labels.Raster;
 import io.github.rkaushikdev.nozzlewright.labels.ShiftWindow;
 import io.github.rkaushikdev.nozzlewright.printer.CartridgeSpec;
+import io.github.rkaushikdev.nozzlewright.printer.HeadGeometry;
 import io.github.rkaushikdev.nozzlewright.printer.InkFamily;
 import io.github.rkaushikdev.nozzlewright.util.Repr;
 import java.nio.file.Path;
@@ -138,16 +141,51 @@ final class LabelCommands extends Group {
         return LabelTemplate.parse(Leaf.readText(source));
     }
 
-    /** Parse a label and say what is in it. */
+    /** Parse a label and say what is in it, and with {@code --lint} whether it will print. */
     @Command(name = "check", description = "Parse a label and say what is in it.")
     static final class Check extends Leaf {
 
         @Parameters(index = "0", paramLabel = "SOURCE", description = "A label file.")
         private Path source;
 
+        @Option(names = "--lint", description = "Check it against a head as well, and exit 1 if it cannot print.")
+        private boolean lint;
+
+        @Option(names = "--pens", defaultValue = "1", description = "Pens stacked on the head, for --lint.")
+        private int pens;
+
+        @Option(names = "--dpi", defaultValue = "300", description = "Firing rate along the product, for --lint.")
+        private int dpi;
+
+        @Option(names = "--at", defaultValue = "", description = "Render dates as if it were this moment.")
+        private String at;
+
+        @Option(names = "--answer", description = "Answer a prompt, as name=value.")
+        private List<String> answer = new ArrayList<>();
+
+        @Option(names = "--json", description = "Print the lint report as JSON.")
+        private boolean asJson;
+
         @Override
         public Integer call() {
             LabelTemplate template = parseFile(source);
+            if (!lint) {
+                describe(template);
+                return Main.OK;
+            }
+            HeadGeometry head = HeadGeometry.stacked(PrinterCommands.FALLBACK_FAMILY, pens, dpi);
+            head.validate();
+            LintReport report = Lint.check(template, defaultFonts(), head, whenOrNow(at), prompts(answer));
+            if (asJson) {
+                Output.emit(out(), report.asMap(), true);
+            } else {
+                describe(template);
+                out().println(report.render());
+            }
+            return report.ok() ? Main.OK : Main.REFUSED;
+        }
+
+        private void describe(LabelTemplate template) {
             out().println(template.name() + " is " + template.heightDots() + " dots high");
             for (Field field : template.fields()) {
                 out().println("  field " + field.name() + " " + field.getClass().getSimpleName());
@@ -161,7 +199,6 @@ final class LabelCommands extends Group {
                 out().println("  needs answers for: "
                         + interactive.stream().map(Field::name).collect(Collectors.joining(", ")));
             }
-            return Main.OK;
         }
     }
 

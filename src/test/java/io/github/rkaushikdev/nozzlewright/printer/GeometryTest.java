@@ -31,6 +31,26 @@ class GeometryTest {
     }
 
     @Test
+    void aStackedHeadPutsEachPenUnderTheLast() {
+        HeadGeometry head = HeadGeometry.stacked("HVX8PEN", 3, 600);
+        head.validate();
+        assertThat(head.penCount()).isEqualTo(3);
+        assertThat(head.heightDots()).isEqualTo(3 * 2 * NOZZLES_PER_ROW);
+        assertThat(head.horizontalDpi()).isEqualTo(600);
+        assertThat(head.group(1).pens())
+                .extracting(PenGeometry::verticalOffsetDots)
+                .containsExactly(0, 2 * NOZZLES_PER_ROW, 4 * NOZZLES_PER_ROW);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"0", "9"})
+    void aStackedHeadHasOneToEightPens(int pens) {
+        assertThatThrownBy(() -> HeadGeometry.stacked("HVX8PEN", pens, 300))
+                .isInstanceOf(ConfigError.class)
+                .hasMessageContaining("one to eight pens");
+    }
+
+    @Test
     void orientationQuarterTurns() {
         assertThat(Orientation.UP.quarterTurns()).isZero();
         assertThat(Orientation.RIGHT.quarterTurns()).isEqualTo(1);

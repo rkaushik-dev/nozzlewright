@@ -78,6 +78,59 @@ class CliLabelTest {
         assertThat(result.exitCode()).isNotZero();
     }
 
+    static final String CODED = "LABEL coded 104\n"
+            + "FIELD serial COUNTER width=6\n"
+            + "BARCODE code 0,40 serial height=40 module=3 human=0\n"
+            + "END\n";
+
+    @Test
+    void checkWithLintReportsTheFindings() throws Exception {
+        Path source = write("coded.lbl", CODED.replace("height=40", "height=12"));
+        Cli.Result result = invoke(tmp, "label", "check", source.toString(), "--lint");
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.stdout())
+                .contains("coded is 104 dots high")
+                .contains("coded: 1 findings")
+                .contains("warn  code         a 12 dot high barcode is hard to aim a scanner at");
+    }
+
+    @Test
+    void checkWithLintRefusesALabelTheHeadCannotPrint() throws Exception {
+        Path source = write("coded.lbl", CODED.replace("LABEL coded 104", "LABEL coded 300"));
+        Cli.Result one = invoke(tmp, "label", "check", source.toString(), "--lint");
+        assertThat(one.exitCode()).isEqualTo(Main.REFUSED);
+        assertThat(one.stdout()).contains("the head reaches 104");
+        Cli.Result three = invoke(tmp, "label", "check", source.toString(), "--lint", "--pens", "3");
+        assertThat(three.exitCode()).isZero();
+    }
+
+    @Test
+    void checkWithLintMeasuresAtTheChosenRate() throws Exception {
+        Path source = write("coded.lbl", CODED.replace("module=3", "module=2"));
+        Cli.Result at300 = invoke(tmp, "label", "check", source.toString(), "--lint");
+        Cli.Result at600 = invoke(tmp, "label", "check", source.toString(), "--lint", "--dpi", "600");
+        assertThat(at300.stdout()).doesNotContain("hand scanner");
+        assertThat(at600.stdout()).contains("a 2 dot module at 600 dpi is 0.085 mm");
+    }
+
+    @Test
+    void checkWithLintPrintsJson() throws Exception {
+        Path source = write("coded.lbl", CODED.replace("height=40", "height=12"));
+        Cli.Result result = invoke(tmp, "label", "check", source.toString(), "--lint", "--json");
+        JsonNode report = json(result.stdout());
+        assertThat(report.get("label").asText()).isEqualTo("coded");
+        assertThat(report.get("ok").asBoolean()).isTrue();
+        assertThat(report.get("findings").get(0).get("where").asText()).isEqualTo("code");
+    }
+
+    @Test
+    void checkWithLintRefusesAHeadThatCannotExist() throws Exception {
+        Path source = write("coded.lbl", CODED);
+        Cli.Result result = invoke(tmp, "label", "check", source.toString(), "--lint", "--pens", "9");
+        assertThat(result.exitCode()).isEqualTo(Main.REFUSED);
+        assertThat(result.stderr()).contains("one to eight pens");
+    }
+
     @Test
     void proofDrawsTheLabel() throws Exception {
         Path source = write("carton.lbl", CARTON);

@@ -2,7 +2,9 @@ package io.github.rkaushikdev.nozzlewright.labels;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Everything {@link Lint} found about one label.
@@ -37,13 +39,32 @@ public record LintReport(String label, List<Finding> findings) {
         return findings.stream().filter(item -> item.grade() == grade).toList();
     }
 
-    /** The report as text: a count line, then the findings worst first, then by where they are. */
-    public String render() {
+    /** The report as one mapping: the label, whether it can print, and every finding worst first. */
+    public Map<String, Object> asMap() {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("label", label);
+        out.put("ok", ok());
+        out.put(
+                "findings",
+                sorted().stream()
+                        .map(item ->
+                                Map.of("grade", item.grade().value(), "where", item.where(), "message", item.message()))
+                        .toList());
+        return out;
+    }
+
+    /** The findings worst first, then by where they are. */
+    private List<Finding> sorted() {
         List<Finding> rows = new ArrayList<>(findings);
         rows.sort(Comparator.comparing(Finding::grade).thenComparing(Finding::where));
+        return rows;
+    }
+
+    /** The report as text: a count line, then the findings worst first, then by where they are. */
+    public String render() {
         List<String> lines = new ArrayList<>();
         lines.add(label + ": " + findings.size() + " findings");
-        rows.forEach(item -> lines.add(item.toString()));
+        sorted().forEach(item -> lines.add(item.toString()));
         return String.join("\n", lines);
     }
 }

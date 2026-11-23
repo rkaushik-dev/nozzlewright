@@ -2,6 +2,7 @@ package io.github.rkaushikdev.nozzlewright.printer;
 
 import io.github.rkaushikdev.nozzlewright.ConfigError;
 import io.github.rkaushikdev.nozzlewright.util.Repr;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -31,6 +32,24 @@ public record HeadGeometry(String family, int horizontalDpi, int verticalDpi, Li
     /** A head firing at the native 300 dpi on both axes. */
     public HeadGeometry(String family, List<GroupGeometry> groups) {
         this(family, Head.NATIVE_VERTICAL_DPI, Head.NATIVE_VERTICAL_DPI, groups);
+    }
+
+    /**
+     * A head of {@code pens} two row pens stitched straight down in one group, which is how an
+     * HVX8PEN is built for a tall message and what a desk check assumes when no machine was read.
+     *
+     * @throws ConfigError when the pen count is not one to eight
+     */
+    public static HeadGeometry stacked(String family, int pens, int horizontalDpi) {
+        if (pens < 1 || pens > 8) {
+            throw new ConfigError("head.pens", pens, "a head carries one to eight pens");
+        }
+        List<PenGeometry> stack = new ArrayList<>();
+        for (int index = 1; index <= pens; index++) {
+            PenGeometry pen = new PenGeometry(index);
+            stack.add(pen.withVerticalOffsetDots((index - 1) * pen.heightDots()));
+        }
+        return new HeadGeometry(family, horizontalDpi, Head.NATIVE_VERTICAL_DPI, List.of(new GroupGeometry(1, stack)));
     }
 
     /** The same head firing at {@code value} dpi along product travel. */

@@ -4,14 +4,11 @@ import static io.github.rkaushikdev.nozzlewright.labels.Fixtures.standardFonts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.rkaushikdev.nozzlewright.printer.GroupGeometry;
 import io.github.rkaushikdev.nozzlewright.printer.HeadGeometry;
-import io.github.rkaushikdev.nozzlewright.printer.PenGeometry;
 import io.github.rkaushikdev.nozzlewright.smoke.Smoke;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -32,10 +29,7 @@ class LintTest {
 
     /** Group one with {@code pens} two row pens stacked straight down. */
     static HeadGeometry head(int pens, int dpi) {
-        List<PenGeometry> stacked = IntStream.range(0, pens)
-                .mapToObj(n -> new PenGeometry(n + 1).withVerticalOffsetDots(n * 104))
-                .toList();
-        return new HeadGeometry("HVX8PEN", dpi, 300, List.of(new GroupGeometry(1, stacked)));
+        return HeadGeometry.stacked("HVX8PEN", pens, dpi);
     }
 
     static HeadGeometry head() {
@@ -52,6 +46,27 @@ class LintTest {
 
     static boolean anyMessage(List<Finding> findings, String text) {
         return findings.stream().anyMatch(item -> item.message().contains(text));
+    }
+
+    @Test
+    void theReportAsAMappingPutsTheWorstFirst() {
+        LintReport report = check(GOOD.replace("height=40", "height=12").replace("TEXT HALVEX", "TEXT HALVEXs"));
+        Map<String, Object> map = report.asMap();
+        assertThat(map).containsEntry("label", "carton").containsEntry("ok", true);
+        List<?> findings = (List<?>) map.get("findings");
+        assertThat(findings).hasSize(report.findings().size());
+        assertThat(findings.get(0))
+                .isEqualTo(Map.of(
+                        "grade",
+                        "warn",
+                        "where",
+                        "code",
+                        "message",
+                        report.of(Grade.WARN).stream()
+                                .filter(item -> item.where().equals("code"))
+                                .findFirst()
+                                .orElseThrow()
+                                .message()));
     }
 
     @Test
