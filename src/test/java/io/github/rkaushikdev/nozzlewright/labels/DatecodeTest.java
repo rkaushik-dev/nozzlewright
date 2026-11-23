@@ -174,4 +174,43 @@ class DatecodeTest {
                 .isInstanceOf(LabelError.class)
                 .hasMessageContaining("leaves the calendar");
     }
+
+    @Test
+    void aSingleYearDigit() {
+        assertThat(render("Y")).isEqualTo("5");
+        assertThat(DateCode.format("Y", day(2030, 1, 1))).isEqualTo("0");
+    }
+
+    @Test
+    void theJulianLotCode() {
+        assertThat(render("YJJJ")).isEqualTo("5165");
+        assertThat(DateCode.format("YJJJ", day(2024, 12, 31))).isEqualTo("4366");
+    }
+
+    @Test
+    void threeYearLettersAreTwoDigitsThenOne() {
+        assertThat(render("YYY")).isEqualTo("255");
+    }
+
+    @Test
+    void theWeekYearFollowsTheWeekAcrossNewYear() {
+        LocalDateTime lateDecember = day(2024, 12, 30);
+        assertThat(DateCode.format("YYWW", lateDecember)).isEqualTo("2401");
+        assertThat(DateCode.format("GGWW", lateDecember)).isEqualTo("2501");
+        assertThat(DateCode.format("GGGG-WW", lateDecember)).isEqualTo("2025-01");
+        LocalDateTime earlyJanuary = day(2027, 1, 1);
+        assertThat(DateCode.format("GGWW", earlyJanuary)).isEqualTo("2653");
+    }
+
+    @Test
+    void theWeekYearIsTheCalendarYearMidYear() {
+        assertThat(render("GGGG GG")).isEqualTo("2025 25");
+    }
+
+    @Test
+    void tokensAreListedInOrderWithLiteralsSkipped() {
+        assertThat(DateCode.tokensIn("'WW 'YYWW/MMM")).containsExactly("YY", "WW", "MMM");
+        assertThat(DateCode.tokensIn("")).isEmpty();
+        assertThat(DateCode.tokensIn("LOT")).isEmpty();
+    }
 }

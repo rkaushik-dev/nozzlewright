@@ -1,14 +1,17 @@
 package io.github.rkaushikdev.nozzlewright.labels;
 
 import io.github.rkaushikdev.nozzlewright.LabelError;
-import io.github.rkaushikdev.nozzlewright.util.Repr;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.temporal.IsoFields;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Function;
 
 /**
  * Date codes in the Halvex pattern language, and the expiry arithmetic behind a best before.
@@ -23,12 +26,18 @@ import java.util.Locale;
  * <pre>
  *     YYYY  four digit year          JJJ   day of year, zero padded
  *     YY    two digit year           WW    ISO week number
- *     MMM   month abbreviation       E     ISO weekday, 1 is Monday
- *     MM    month number             EEE   weekday abbreviation
- *     DD    day of month             HH    hour, 24 hour clock
- *     Q     quarter, 1 to 4          NN    minute
+ *     Y     last digit of the year   GGGG  year the ISO week belongs to
+ *     MMM   month abbreviation       GG    the same, two digits
+ *     MM    month number             E     ISO weekday, 1 is Monday
+ *     DD    day of month             EEE   weekday abbreviation
+ *     Q     quarter, 1 to 4          HH    hour, 24 hour clock
+ *                                    NN    minute
  *                                    SS    second
  * </pre>
+ *
+ * <p>{@code YJJJ} is the Julian lot code a lot of food plants print, one year digit and the day of
+ * the year. {@code GGWW} is the week code that stays right across New Year: the 30th of December
+ * 2024 is in week 1 of 2025, so {@code YYWW} prints {@code 2401}, a week that ended a year earlier.
  *
  * <p>Anything between single quotes is literal, and two single quotes is one quote. Everything
  * else passes through, which is how separators work.
@@ -48,9 +57,59 @@ public final class DateCode {
 
     private static final char QUOTE = '\'';
 
-    /** Longest first, so MMM is not read as MM followed by a stray M. */
-    private static final List<String> TOKENS =
-            List.of("YYYY", "EEE", "MMM", "JJJ", "YY", "MM", "DD", "WW", "HH", "NN", "SS", "Q", "E");
+    /** One pattern token and what it renders to. */
+    private enum Token {
+        YYYY("YYYY", when -> pad(when.getYear(), 4)),
+        GGGG("GGGG", when -> pad(when.get(IsoFields.WEEK_BASED_YEAR), 4)),
+        EEE("EEE", when -> WEEKDAY_NAMES.get(when.getDayOfWeek().getValue() - 1)),
+        MMM("MMM", when -> MONTH_NAMES.get(when.getMonthValue() - 1)),
+        JJJ("JJJ", when -> pad(when.getDayOfYear(), 3)),
+        YY("YY", when -> pad(Math.floorMod(when.getYear(), 100), 2)),
+        GG("GG", when -> pad(Math.floorMod(when.get(IsoFields.WEEK_BASED_YEAR), 100), 2)),
+        MM("MM", when -> pad(when.getMonthValue(), 2)),
+        DD("DD", when -> pad(when.getDayOfMonth(), 2)),
+        WW("WW", when -> pad(when.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR), 2)),
+        HH("HH", when -> pad(when.getHour(), 2)),
+        NN("NN", when -> pad(when.getMinute(), 2)),
+        SS("SS", when -> pad(when.getSecond(), 2)),
+        Y("Y", when -> String.valueOf(Math.floorMod(when.getYear(), 10))),
+        Q("Q", when -> String.valueOf((when.getMonthValue() - 1) / 3 + 1)),
+        E("E", when -> String.valueOf(when.getDayOfWeek().getValue()));
+
+        private final String text;
+        private final Function<LocalDateTime, String> value;
+
+        Token(String text, Function<LocalDateTime, String> value) {
+            this.text = text;
+            this.value = value;
+        }
+    }
+
+    /** Longest first, so MMM is not read as MM followed by a stray M, nor YY as two year digits. */
+    private static final List<Token> TOKENS = Arrays.stream(Token.values())
+            .sorted(Comparator.comparingInt((Token token) -> token.text.length())
+                    .reversed())
+            .toList();
+
+    /** The tokens a pattern uses, in the order they appear, literals skipped. */
+    static List<String> tokensIn(String pattern) {
+        List<String> found = new ArrayList<>();
+        int index = 0;
+        while (index < pattern.length()) {
+            if (pattern.charAt(index) == QUOTE) {
+                index = readLiteral(pattern, index, new StringBuilder());
+                continue;
+            }
+            Token token = matchToken(pattern, index);
+            if (token == null) {
+                index++;
+                continue;
+            }
+            found.add(token.text);
+            index += token.text.length();
+        }
+        return List.copyOf(found);
+    }
 
     private static final int FIRST_YEAR = 1;
     private static final int LAST_YEAR = 9999;
@@ -81,14 +140,14 @@ public final class DateCode {
                 index = readLiteral(pattern, index, out);
                 continue;
             }
-            String token = matchToken(pattern, index);
+            Token token = matchToken(pattern, index);
             if (token == null) {
                 out.append(ch);
                 index++;
                 continue;
             }
-            out.append(tokenValue(token, when));
-            index += token.length();
+            out.append(token.value.apply(when));
+            index += token.text.length();
         }
         return out.toString();
     }
@@ -132,13 +191,17 @@ public final class DateCode {
         return LocalDate.of((int) year, month, Math.min(when.getDayOfMonth(), lastDay));
     }
 
-    private static String matchToken(String pattern, int index) {
-        for (String token : TOKENS) {
-            if (pattern.startsWith(token, index)) {
+    private static Token matchToken(String pattern, int index) {
+        for (Token token : TOKENS) {
+            if (pattern.startsWith(token.text, index)) {
                 return token;
             }
         }
         return null;
+    }
+
+    private static String pad(int value, int width) {
+        return String.format(Locale.ROOT, "%0" + width + "d", value);
     }
 
     /** Consume a quoted run starting at {@code index}, append it, and return where reading resumes. */
@@ -160,24 +223,5 @@ public final class DateCode {
             return index + 1;
         }
         throw new LabelError("date pattern has an unclosed quote");
-    }
-
-    private static String tokenValue(String token, LocalDateTime when) {
-        return switch (token) {
-            case "YYYY" -> String.format(Locale.ROOT, "%04d", when.getYear());
-            case "YY" -> String.format(Locale.ROOT, "%02d", Math.floorMod(when.getYear(), 100));
-            case "MMM" -> MONTH_NAMES.get(when.getMonthValue() - 1);
-            case "MM" -> String.format(Locale.ROOT, "%02d", when.getMonthValue());
-            case "DD" -> String.format(Locale.ROOT, "%02d", when.getDayOfMonth());
-            case "JJJ" -> String.format(Locale.ROOT, "%03d", when.getDayOfYear());
-            case "WW" -> String.format(Locale.ROOT, "%02d", when.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR));
-            case "EEE" -> WEEKDAY_NAMES.get(when.getDayOfWeek().getValue() - 1);
-            case "E" -> String.valueOf(when.getDayOfWeek().getValue());
-            case "Q" -> String.valueOf((when.getMonthValue() - 1) / 3 + 1);
-            case "HH" -> String.format(Locale.ROOT, "%02d", when.getHour());
-            case "NN" -> String.format(Locale.ROOT, "%02d", when.getMinute());
-            case "SS" -> String.format(Locale.ROOT, "%02d", when.getSecond());
-            default -> throw new LabelError("date token " + Repr.of(token) + " has no value");
-        };
     }
 }

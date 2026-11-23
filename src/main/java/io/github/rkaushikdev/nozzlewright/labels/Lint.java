@@ -77,6 +77,7 @@ public final class Lint {
         List<Finding> findings = new ArrayList<>();
         findings.addAll(checkHeight(template, head));
         findings.addAll(checkElements(template, fonts, head));
+        findings.addAll(checkDatePatterns(template));
         findings.addAll(checkRender(template, fonts, head, now, answers));
         return new LintReport(template.name(), findings);
     }
@@ -101,6 +102,35 @@ public final class Lint {
                             + " available dots, a taller font would read better"));
         }
         return List.of();
+    }
+
+    /**
+     * A week number printed beside the calendar year.
+     *
+     * <p>ISO weeks do not start on the first of January. The last days of December can sit in week 1
+     * of the next year and the first days of January in week 52 or 53 of the last one, so {@code
+     * YYWW} prints a week code a whole year out for a few days every winter. The week based year
+     * tokens {@code GG} and {@code GGGG} are what goes with {@code WW}.
+     */
+    private static List<Finding> checkDatePatterns(LabelTemplate template) {
+        List<Finding> findings = new ArrayList<>();
+        for (Field field : template.fields()) {
+            String pattern =
+                    switch (field) {
+                        case DateField date -> date.pattern();
+                        case ExpiryField expiry -> expiry.pattern();
+                        default -> "";
+                    };
+            List<String> tokens = DateCode.tokensIn(pattern);
+            boolean calendarYear = tokens.stream().anyMatch(token -> token.startsWith("Y"));
+            if (tokens.contains("WW") && calendarYear) {
+                findings.add(new Finding(
+                        Grade.WARN,
+                        field.name(),
+                        "WW beside the calendar year prints the wrong year around New Year, use GG or GGGG"));
+            }
+        }
+        return findings;
     }
 
     /** Per element checks that do not need the message rendered. */

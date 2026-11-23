@@ -70,6 +70,29 @@ class LintTest {
     }
 
     @Test
+    void aWeekCodeBesideTheCalendarYearIsAWarning() {
+        LintReport report = check(GOOD.replace("FIELD brand TEXT HALVEX", "FIELD brand DATE YYWW"));
+        assertThat(report.of(Grade.WARN)).anySatisfy(item -> {
+            assertThat(item.where()).isEqualTo("brand");
+            assertThat(item.message()).contains("use GG or GGGG");
+        });
+    }
+
+    @Test
+    void aWeekCodeBesideTheWeekYearIsFine() {
+        LintReport week = check(GOOD.replace("FIELD brand TEXT HALVEX", "FIELD brand DATE GGWW"));
+        assertThat(anyMessage(week.findings(), "New Year")).isFalse();
+        LintReport quoted = check(GOOD.replace("FIELD brand TEXT HALVEX", "FIELD brand EXPIRY 'WW'YYJJJ days=3"));
+        assertThat(anyMessage(quoted.findings(), "New Year")).isFalse();
+    }
+
+    @Test
+    void anExpiryWeekCodeIsCheckedToo() {
+        LintReport report = check(GOOD.replace("FIELD brand TEXT HALVEX", "FIELD brand EXPIRY WW/YYYY days=7"));
+        assertThat(anyMessage(report.of(Grade.WARN), "New Year")).isTrue();
+    }
+
+    @Test
     void gradesThatBlock() {
         assertThat(Grade.STOP.blocks()).isTrue();
         assertThat(Grade.WARN.blocks()).isFalse();
